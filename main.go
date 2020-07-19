@@ -91,9 +91,15 @@ func writeFile(fileName string, b bytes.Buffer) {
 	}
 }
 
+func writeIntro(b *bytes.Buffer) {
+	b.WriteString("I'm Libo Zeng and this is my personal web site. For now this will just have some random translations")
+	b.WriteString("私はリーボと言います。これは私の個人サイトです。とりあえず、雑な翻訳を投稿します。")
+}
+
 func generateIndex(postNameMap map[string]postMeta) {
 	var b bytes.Buffer
 	b.WriteString(indexLayoutStart("Libo Zeng"))
+	writeIntro()
 	writePostsSection(&b, postNameMap)
 	b.WriteString(layoutEnd())
 	writeFile("index.html", b)
@@ -101,7 +107,6 @@ func generateIndex(postNameMap map[string]postMeta) {
 
 func writePostsSection(b *bytes.Buffer, postNameMap map[string]postMeta) {
 	for id, metaInfo := range postNameMap {
-		log.Print(id)
 		b.WriteString(`<div class="paragraph">
 		<div class="date">` + metaInfo.date + `</div>
         <a href="` + id + `">
