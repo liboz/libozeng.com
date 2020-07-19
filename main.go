@@ -176,8 +176,14 @@ func generatePosts(postNameMap map[string]postMeta) {
 		b.WriteString(postLayoutStart(metaInfo.title))
 		b.WriteString("<p>" + metaInfo.date + "</p>")
 		for scanner.Scan() {
-			b.Write(scanner.Bytes())
+			b.WriteString("\n")
+			b.WriteString("			" + scanner.Text())
 		}
+		b.WriteString(`
+			<p>
+				Any errata or comments can be made by <a href="https://github.com/liboz/libozeng.com/pulls">sending me a pull request</a>.
+			</p>
+		`)
 		b.WriteString("<p><a href=\"index.html\">Back</a></p>")
 		b.WriteString(layoutEnd())
 
