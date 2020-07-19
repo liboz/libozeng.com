@@ -179,6 +179,7 @@ func generatePosts(postNameMap map[string]postMeta) {
 			b.WriteString("\n")
 			b.WriteString("			" + scanner.Text())
 		}
+		b.WriteString("<hr></hr>")
 		b.WriteString(`
 			<p>
 				Any errata or comments can be made by <a href="https://github.com/liboz/libozeng.com/pulls">sending me a pull request</a>.
