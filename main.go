@@ -11,40 +11,37 @@ import (
 
 func indexLayoutStart(title string) string {
 	return `<!DOCTYPE html>
-	<html>
-		<head>
-			<meta charset="utf-8">
-			<meta name="viewport" content="width=device-width, initial-scale=1">
-			<title>` + title + `</title>
-			<style>
-				div.main {
-					display: flex;
-				}
-				div.paragraph {
-					display: flex;
-				}
+<html>
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<title>` + title + `</title>
+		<style>
+			div.paragraph {
+				display: flex;
+			}
+			div.date {
+				width: 6em;
+				padding-bottom: 1em;
+			}
+			@media only screen and (max-device-width: 667px) {
 				div.date {
-					width: 6em;
-					padding-bottom: 1em;
+				width: 12em;
 				}
-				@media only screen and (max-device-width: 667px) {
-					div.date {
-					width: 12em;
-					}
-				}
-			</style>
-			<script>
-			</script>
-		</head>
-		<body>
-			<div class="main">`
+			}
+		</style>
+		<script>
+		</script>
+	</head>
+	<body>
+		<div class="main">`
 }
 
 func layoutEnd() string {
 	return `
-			</div>
-		</body>
-	</html>`
+		</div>
+	</body>
+</html>`
 }
 
 func postLayoutStart(title string) string {
@@ -92,14 +89,22 @@ func writeFile(fileName string, b bytes.Buffer) {
 }
 
 func writeIntro(b *bytes.Buffer) {
-	b.WriteString("I'm Libo Zeng and this is my personal web site. For now this will just have some random translations")
-	b.WriteString("私はリーボと言います。これは私の個人サイトです。とりあえず、雑な翻訳を投稿します。")
+	b.WriteString(`
+			<p>
+			I'm Libo Zeng and this is my personal web site. For now this will just have some random translations
+			</p>
+	`)
+	b.WriteString(`
+			<p>
+			私はリーボと言います。これは私の個人サイトです。とりあえず、雑な翻訳を投稿します。
+			</p>
+	`)
 }
 
 func generateIndex(postNameMap map[string]postMeta) {
 	var b bytes.Buffer
 	b.WriteString(indexLayoutStart("Libo Zeng"))
-	writeIntro()
+	writeIntro(&b)
 	writePostsSection(&b, postNameMap)
 	b.WriteString(layoutEnd())
 	writeFile("index.html", b)
@@ -107,12 +112,14 @@ func generateIndex(postNameMap map[string]postMeta) {
 
 func writePostsSection(b *bytes.Buffer, postNameMap map[string]postMeta) {
 	for id, metaInfo := range postNameMap {
-		b.WriteString(`<div class="paragraph">
-		<div class="date">` + metaInfo.date + `</div>
-        <a href="` + id + `">
-          ` + metaInfo.blurb +
+		b.WriteString(`
+			<div class="paragraph">
+				<div class="date">` + metaInfo.date + `</div>
+				<a href="` + id + `">
+				` + metaInfo.blurb +
 			`</a>
-      </div>`)
+			</div>
+	  `)
 	}
 }
 
