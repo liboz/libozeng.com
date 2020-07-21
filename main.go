@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"sort"
 )
 
 func indexLayoutStart(title string) string {
@@ -111,7 +112,15 @@ func generateIndex(postNameMap map[string]postMeta) {
 }
 
 func writePostsSection(b *bytes.Buffer, postNameMap map[string]postMeta) {
-	for id, metaInfo := range postNameMap {
+	fileNames := make([]string, 0)
+	for id := range postNameMap {
+		fileNames = append(fileNames, id)
+	}
+	sort.Strings(fileNames)
+
+	for i := len(fileNames) - 1; i >= 0; i-- {
+		id := fileNames[i]
+		metaInfo := postNameMap[id]
 		b.WriteString(`
 			<div class="paragraph">
 				<div class="date">` + metaInfo.date + `</div>
