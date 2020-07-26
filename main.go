@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"sort"
+	"strings"
 )
 
 func indexLayoutStart(title string) string {
@@ -191,7 +192,14 @@ func getPostMeta(fi os.FileInfo) (string, postMeta, *os.File, *bufio.Scanner) {
 	}
 	metaInfo := postMeta{}
 	metaInfo.date = date
-	metaInfo.title = title
+	// len(id) - 5 to remove the .html
+	splitStrings := strings.Split(id[10:len(id)-5], "-")
+	titleString := ""
+	for _, word := range splitStrings {
+		titleString += strings.Title(word) + " "
+	}
+	titleString += date
+	metaInfo.title = titleString
 	metaInfo.blurb = blurbString
 
 	return id, metaInfo, file, scanner
