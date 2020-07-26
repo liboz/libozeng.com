@@ -172,8 +172,6 @@ func getPostMeta(fi os.FileInfo) (string, postMeta, *os.File, *bufio.Scanner) {
 	}
 
 	scanner := bufio.NewScanner(file)
-	scanner.Scan()
-	title := scanner.Text()
 
 	blurbString := ""
 	start := false
