@@ -184,6 +184,7 @@ func generatePosts(postNameMap map[string]postMeta) {
 		var b bytes.Buffer
 		b.WriteString(postLayoutStart(metaInfo.title))
 		b.WriteString("<p>" + metaInfo.date + "</p>")
+		b.WriteString("<h2>" + metaInfo.blurb + "</h2>")
 		for scanner.Scan() {
 			b.WriteString("\n")
 			b.WriteString("			" + scanner.Text())
