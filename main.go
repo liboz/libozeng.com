@@ -41,6 +41,29 @@ func indexLayoutStart(title string) string {
 func layoutEnd() string {
 	return `
 		</div>
+		<!-- The core Firebase JS SDK is always required and must be listed first -->
+		<script src="https://www.gstatic.com/firebasejs/7.17.1/firebase-app.js"></script>
+
+		<!-- TODO: Add SDKs for Firebase products that you want to use
+			https://firebase.google.com/docs/web/setup#available-libraries -->
+		<script src="https://www.gstatic.com/firebasejs/7.17.1/firebase-analytics.js"></script>
+
+		<script>
+		// Your web app's Firebase configuration
+		var firebaseConfig = {
+			apiKey: "AIzaSyDTRHph0ykvK6jbqH1RQCm0ReoRrS4jXe4",
+			authDomain: "libo-283700.firebaseapp.com",
+			databaseURL: "https://libo-283700.firebaseio.com",
+			projectId: "libo-283700",
+			storageBucket: "libo-283700.appspot.com",
+			messagingSenderId: "125580517524",
+			appId: "1:125580517524:web:7f401d13a30631537ed481",
+			measurementId: "G-6YBSVRX3BC"
+		};
+		// Initialize Firebase
+		firebase.initializeApp(firebaseConfig);
+		firebase.analytics();
+		</script>
 	</body>
 </html>`
 }
