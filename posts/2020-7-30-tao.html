@@ -1,0 +1,88 @@
+<blurb>
+  TAO's architecture
+</blurb>
+
+<p>
+  <a href="https://us.wantedly.com/companies/wantedly/post_articles/223522"
+    >Original Source</a
+  >
+</p>
+<p>
+  TAO is a multi-regional system that has a two-layered cache layer and a
+  storage layer. The Storage layer uses a MySQL cluster. Before TAO was
+  introduced social graph data was apparently stored in MySQL in Facebook, which
+  makes MySQL a natural choice for the storage layer.
+</p>
+<p>
+  In the MySQL servers, there is both a table for objects and associations and
+  both are stored as records. For both objects and associations, a single table
+  stores all the same type of data as a principle. Key-value data is stored in a
+  data column. The association tables have (id1, atype, time) as an index for
+  fast response times. Also, they store the number of associations in a
+  different table to avoid using COUNT queries.
+</p>
+<p>
+  Because the data that TAO deals with is very large, object and association
+  data are distributed in shards and thus are divided amongst various servers
+  throughout a MySQL cluster. Usually, the number of shards is much larger than
+  the number of servers, it's possible to respond to server load adjusting the
+  division of shards. Because the shard id is buried within the object id , as
+  long as one sees the id one knows what shard that object is in. Associations
+  come in the triplet (id1, atype, id2), and are stored in the same shard as the
+  object of id1, in most cases a single server will respond to an association
+  query.
+</p>
+<p>
+  TAO's cache layer is a two-layer system. It is divided into a leader and
+  followers. The leader is a cache server that directly communicates with the
+  storage layer and forms a tier within a region. Within a tier, the shards it
+  is in charge of are known and it can deal with object and association requests
+  for the entire tier.
+</p>
+<p>
+  Followers are cache servers that are directly connected to clients. They form
+  multiple tiers. Followers are linked to their own leaders and forward cache
+  misses and write requests to that leader. Because of the two layers of the
+  cache layer, they can contain the number of servers within a tier and by
+  increasing the tier number and the cache server count, they can even deal with
+  severe workloads. Because very big tiers are likely to become hot spots, it is
+  very important to keep the number of servers down within a tier.
+</p>
+<p>
+  TAO is an eventually consistent distributed system. When the leader is written
+  to, the followers associated with it are asynchronously notified and the cache
+  is updated. But, to the original follower that executed the write request, the
+  cache is synchronously updated along with the leader's response. Because of
+  this, read-after-write consistency occurs. Since the asynchronous cache update
+  notifications are assigned version numbers, if an old update arrives, it will
+  simply be ignored.
+</p>
+<p>
+  Since a write for a specific id will always arrive at the same leader, the
+  leader's writes are serializable. And because of that, it protects MySQL from
+  the thundering herd effect. A single shard will have the minimum number of
+  queries sent to it.
+</p>
+<p>
+  TAO is set up to be multi-regional and is thus globally distributed. Every
+  region has a leader tier, multiple follower tiers, and a MySQL cluster as
+  discussed earlier. Of the many regions, a single region is the master region
+  and the rest are slave regions. Write requests are sent from the slave leader
+  to the master leader, which then forwards them to the master DB cluster. If
+  the write succeeds, the response is synchronously transmitted to and updates
+  the cache of the slave leader and slave follower. In addition, the slave DB
+  cluster is replicated asynchronously and the caches of the other cache servers
+  are sent notifications. From the perspective of the slave region, because
+  writes require crossing regions, the latency is quite high. On the other hand,
+  because reads are completed within a single region, the latency is low. In
+  Facebook's workload, read requests happen 500 times more often than write
+  requests. Even considering only cache misses, there is a 25x fewer reads than
+  writes. Because of this, they decided on this multi-region architecture.
+</p>
+<p>
+  Facebook chose to have every region possess a copy of the same social graph.
+  In other words, they chose not to distribute the social graph based on
+  regions. They explain the reasoning for this as follows: The internals of the
+  social graph are tightly bound together so distributing it would be quite
+  hard.
+</p>
