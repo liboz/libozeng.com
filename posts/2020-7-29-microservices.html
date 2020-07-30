@@ -1,0 +1,99 @@
+<blurb>
+  The decision whether or not to break it out and make it a microservice
+</blurb>
+
+<p>
+  <a href="https://us.wantedly.com/companies/wantedly/post_articles/193633"
+    >Original Source</a
+  >
+</p>
+<p>
+  One frequent topic of discussion is at what level does one make microservices
+  in a microservice architecture. I have made some reference to this already,
+  but I will attempt to summarize it now.
+</p>
+<p>
+  First of all, even if one puts on the cool label of microservice architecture,
+  one would be well advised to remember that it's still just software. For
+  example, although the O'Reilly book "Microservice Architecture" says that
+  "microservices are split by business domains," it's best to consider it as
+  just one method of applying the microservice architecture and as opposed to
+  taking it as dogma. Because software is typically complicated, making a
+  microservice architecture means doing the work of splitting software up into
+  understandable independent parts. Microservices with these independent
+  parts—software components—as units exist. Usually, when breaking up software
+  components, one is trying to use some abstraction. This is because if there
+  wasn't an abstraction and only a concrete implementation that can be
+  understood simply and directly, it would not reduce the complexity to break it
+  up as a software component, and thus there would be no meaning in doing such a
+  thing.
+</p>
+<p>
+  Therefore, the initial criterion for deciding whether or not to break
+  something into a microservice or not becomes "does the thing work as a
+  software component." And thus to conclude one way or another requires one to
+  consider if the thing works as an abstraction. One yardstick as to whether or
+  not the thing works as an abstraction is the ratio of interface to
+  implementation. In other words, things with narrow interfaces that do a lot of
+  work will likely be useful as microservices. (For example, consider the
+  abstraction of a clock which has a minute hand and an hour hand. Even if one
+  doesn't understand the inner workings that let it accurately record time, as
+  long as one understands the interface it can be widely used. That is what one
+  can call a good abstraction.) The book "A Philosophy of Software Design"
+  provides practical advice on what kind of software components are good. As an
+  example, Wantedly has a microservice called "connections" that deals with
+  social graphs. Even if one expects that dealing with social graphs is a
+  complicated task, by abstracting the graph and providing an API, one can see a
+  way to use it as a simple interface in this situation. I think it works well
+  as a software component. This is introduced as the software engineering
+  principle that "modules should be deep."
+</p>
+<p>
+  Even so, if one just wants to make a thing into a software component, one
+  could split it up as a library. There are many differences when comparing
+  microservices to libraries. I will bring up examples as they come to mind. For
+  example, because Web API or gRPC are abstracted as language agnostic
+  protocols, the users and the implementers can use different technologies. That
+  is one difference that is sometimes called being heterogeneous. For another
+  example, for microservices, server process count and CPU computational
+  resources are to some extent independent. However, a library can only utilize
+  the resources of its consumer. This is a major difference between the two.
+  Fault isolation is made possible by having independent computational
+  resources. In connection with this, when deploying an update to a software
+  component, a library requires its users to explicitly update the library as
+  well as push out its own update. However, a microservice only requires a
+  batched update from the component provider. In other words, multiple versions
+  of a service existing at the same time is something that does not happen.
+  Putting all this together, I understand microservice architecture as being a
+  system that uses a language agnostic communication protocol to distribute
+  things. If it is only a distributed system, then there are technologies like
+  Erlang, and for microservices that face problems stemming from distributed
+  systems, Erlang exists and it can solve those problems. That is why I think
+  it's a good choice to make it clear from the designs to not just use a single
+  language.
+</p>
+<p>
+  With all that, the second criterion for deciding whether or not to break
+  something up into a microservice is whether or not it should be a component of
+  a distributed system. To put it more plainly, if one wants to provide uniform
+  behavior for many users, using a microservice is a good idea. There is also
+  the reason of fault tolerance. Next, I will introduce a microservice called
+  "connections." Because there is a need for a service that provides social
+  graphs in a unified way to each place in the Wantedly platform that might want
+  to use it, a microservice rather than a library was the desired choice. Even
+  from the perspective of fault tolerance, when the social graph is temporarily
+  unusable, a default fallback (such as using the normal behavior logic when the
+  logic for dealing with relationships is unusable) is possible.
+</p>
+<p>
+  As a final point, let's talk about being heterogeneous. I have a rather unique
+  opinion on how to decide when to break something up into a microservice. That
+  is to say, for example, if something is written in Rails but you want to use
+  Python and that is the only thing you want, then setting up a monolithic
+  Python service is fine. Despite this, the problem of being heterogeneous is
+  something that frequently comes up and there are definitely times when it is
+  needed. I won't go into the details here but even though using heterogeneous
+  and distributed systems have major advantages, sometimes they won't be
+  complete at the software component level and what to do about that is a
+  problem. I just wanted to mention that as a problem.
+</p>
