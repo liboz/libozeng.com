@@ -1,0 +1,52 @@
+<blurb>
+  The modern router
+</blurb>
+
+<p>
+  <a href="https://xtech.nikkei.com/atcl/nxt/mag/nnw/18/091800066/091800001/"
+    >Original Source</a
+  >
+</p>
+<p>
+  Local Breakout is the feature that solves this problem. Communication with
+  cloud services that have the risk of putting a high load on the network is not
+  sent to the main network but directly sent from child networks. Communication
+  with non-cloud services is sent via WAN to the main network as per usual. The
+  servers that one communicates to for cloud services such as Office 365 are
+  predetermined. Also, communication with them is typically encrypted via HTTPS.
+  That means separating out the communications with the cloud is possible, and
+  there are no issues from a security perspective.
+</p>
+<p>
+  Let's take a more detailed look at how one implements Local Breakout.
+</p>
+<p>
+  For Office 365, Microsoft lists the server information publicly. This list has
+  the IPv4 address, IPv6 address, and FQDN of all the servers written down. That
+  makes you can determine that communication that matches that information is
+  meant for Office 365. By sending that information through the internet
+  connection, you have implemented Local Breakdown.
+</p>
+<p>
+  There are in fact vendors that have information on the internet that explains
+  how to set up a router in this way. However, the servers that Office 365 uses
+  are periodically changed, so the settings must be changed to match.
+</p>
+<p>
+  To deal with that, something that has gotten more widespread recently is using
+  a vendor-provided signature. A signature is the set of rules that a router
+  uses. It's similar to the pattern filters and virus definition files in
+  anti-virus software. It includes things such as a server's IPv4/IPv6 address,
+  port number, and authentication method.
+</p>
+<p>
+  By using signatures, the administrator doesn't have to deal with the minutia
+  of the settings. Communication settings for common applications like Office
+  365 are provided in the menus, and an administrator simply has to select them.
+</p>
+<p>
+  For example, the settings menu in Yamaha products displays a list of common
+  things such as Office 365, Windows Update, etc that cause a high load on the
+  network. From the settings options, you can select which communications you
+  want to apply Local Breakout to and choose the location to send the packets.
+</p>
