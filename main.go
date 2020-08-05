@@ -18,6 +18,7 @@ func indexLayoutStart(title string) string {
 		<meta charset="utf-8">
 		<meta name="viewport" content="width=device-width, initial-scale=1">
 		<title>` + title + `</title>
+		<link rel="stylesheet" href="sakura-dark.css" type="text/css">
 		<style>
 			div.paragraph {
 				display: flex;
