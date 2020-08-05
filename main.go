@@ -23,9 +23,11 @@ func indexLayoutStart(title string) string {
 			div.paragraph {
 				display: flex;
 			}
+			div.paragraph a {
+				margin-bottom: 1em;
+			}
 			div.date {
 				padding-right: 6em;
-				padding-bottom: 1em;
 			}
 		</style>
 		<script>
