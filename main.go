@@ -24,13 +24,8 @@ func indexLayoutStart(title string) string {
 				display: flex;
 			}
 			div.date {
-				width: 6em;
+				padding-right: 6em;
 				padding-bottom: 1em;
-			}
-			@media only screen and (max-device-width: 667px) {
-				div.date {
-				width: 12em;
-				}
 			}
 		</style>
 		<script>
@@ -77,6 +72,7 @@ func postLayoutStart(title string) string {
 			<meta charset="utf-8">
 			<meta name="viewport" content="width=device-width, initial-scale=1">
 			<title>` + title + `</title>
+			<link rel="stylesheet" href="sakura-dark.css" type="text/css">
 			<style>
 			</style>
 			<script>
