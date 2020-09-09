@@ -24,7 +24,7 @@ func indexLayoutStart(title string) string {
 			div.paragraph {
 				display: flex;
 			}
-			div.paragraph a {
+			div.paragraph div {
 				margin-bottom: 1em;
 				flex: 3;
 			}
@@ -149,9 +149,9 @@ func writePostsSection(b *bytes.Buffer, postNameMap map[string]postMeta) {
 		b.WriteString(`
 			<div class="paragraph">
 				<div class="date">` + metaInfo.date + `</div>
-				<a href="` + id + `">
+				<div><a href="` + id + `">
 				` + metaInfo.blurb +
-			`</a>
+			`</a></div>
 			</div>
 	  `)
 	}
