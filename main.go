@@ -193,7 +193,8 @@ func getPostMeta(fi os.FileInfo) (string, postMeta, *os.File, *bufio.Scanner) {
 	metaInfo := postMeta{}
 	metaInfo.date = date
 	// len(id) - 5 to remove the .html
-	splitStrings := strings.Split(id[10:len(id)-5], "-")
+
+	splitStrings := strings.Split(id[len(date):len(id)-5], "-")
 	titleString := ""
 	for _, word := range splitStrings {
 		titleString += strings.Title(word) + " "
