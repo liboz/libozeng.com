@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"regexp"
 	"sort"
 	"strings"
 )
@@ -163,7 +164,9 @@ type postMeta struct {
 
 func getPostMeta(fi os.FileInfo) (string, postMeta, *os.File, *bufio.Scanner) {
 	id := fi.Name()
-	date := fi.Name()[0:9]
+	re := regexp.MustCompile(`(\d+-)+`)
+	match := re.FindStringSubmatch(fi.Name())
+	date := match[0][0 : len(match[0])-1]
 
 	file, err := os.Open("posts/" + id)
 	if err != nil {
