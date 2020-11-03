@@ -1,0 +1,389 @@
+<blurb>MIT concurrency notes</blurb>
+
+<div id="toc_container">
+  <p class="toc_title">Contents</p>
+  <ul>
+    <li>
+      <a href="#lecture_14">Lecture 14: Optimistic Concurrency Control</a>
+    </li>
+    <li><a href="#lecture_13">Lecture 13: Spanner</a></li>
+    <li><a href="#lecture_12">Lecture 12: Distributed Transactions</a></li>
+    <li><a href="#lecture_11">Lecture 11: Cache Consistency: Frangipani</a></li>
+    <li><a href="#lecture_10">Lecture 10: Cloud Replicated DB, Aurora</a></li>
+  </ul>
+</div>
+
+<p id="lecture_14" class="lecture_heading">
+  Lecture 14: Optimistic Concurrency Control
+</p>
+<ul class="note_bullets">
+  <li>
+    Paper:
+    <a href="https://pdos.csail.mit.edu/6.824/papers/farm-2015.pdf"
+      >FARM (2015)</a
+    >; <a href="https://www.youtube.com/watch?v=Cw6Nj2evjSs">Lecture</a>
+  </li>
+  <li>
+    Use remote direct memory access + non volatile memory (battery powered) to
+    provide serializability (ordered transactions)
+  </li>
+  <li>
+    Research prototype where the app uses special network interface cards (NICs)
+    to read from memory of app on a different computer directly. Only viable in
+    local networks at the moment, but crazy good performance (100x faster than
+    spanner). Uses two phase commits
+  </li>
+  <li>
+    Optimistic Concurrency Control by first reading the value directly from app
+    memory on a different computer and then validating during the transaction
+    after acquiring locks. Pessimistic Concurrency Control blocks on acquring
+    locks while Optimistic aborts when it find that the valid it has read is no
+    longer valid.
+  </li>
+  <li>Direct Read → Lock → Validate → Commit</li>
+</ul>
+
+<p id="lecture_13" class="lecture_heading">Lecture 13: Spanner</p>
+<ul class="note_bullets">
+  <li>
+    Paper:
+    <a href="https://pdos.csail.mit.edu/6.824/papers/spanner.pdf"
+      >Spanner (2012)</a
+    >; <a href="https://www.youtube.com/watch?v=4eW5SWBi7vs">Lecture</a>
+  </li>
+  <li>
+    Use Paxos to make the transacation coordinator in two phase commits have
+    fallbacks and so it does not completely block on transacation coordinator
+    failure (availability). This allows for external
+    consistency/serializability. High demand by programmers for transacations as
+    easier to reason about
+  </li>
+  <li>
+    Use versioning of objects (snapshot isolation) + time API to allow many read
+    only transactions to complete by reading from the the local instance without
+    locking. Paxos sends operations in timestamp order. Must wait until sees a
+    Paxos operation with timestamp after the timestamp of the transaction (See
+    start rule)
+  </li>
+  <li>
+    Time API has uncertainty.
+    <ul>
+      <li>
+        Start Rule: Transaction timestamp = time.now.latest.
+        <ul>
+          <li>Read only: start time</li>
+          <li>Read write: commit time</li>
+        </ul>
+      </li>
+      <li>
+        Commit Wait: Wait to commit a read write transaction until Transaction
+        timestamp < time.now.earliest
+      </li>
+    </ul>
+  </li>
+  <li>Used commerially by Google and also in Cockroachdb</li>
+</ul>
+
+<p id="lecture_12" class="lecture_heading">
+  Lecture 12: Distributed Transactions
+</p>
+<ul class="note_bullets">
+  <li>
+    Paper:
+    <a
+      href="https://ocw.mit.edu/resources/res-6-004-principles-of-computer-system-design-an-introduction-spring-2009/online-textbook/"
+    >
+      Read 6.033 Chapter 9, just 9.1.5, 9.1.6, 9.5.2, 9.5.3, 9.6.3 </a
+    >; <a href="https://www.youtube.com/watch?v=aDp99WDIM_4">Lecture</a>
+  </li>
+  <li>
+    <b>Serializable</b>
+    <ul>
+      <li>
+        There exists some serial order (one at a time) of execution of the
+        transactions such that yields the same result as the actual execution
+      </li>
+      <li>
+        Given two transactions T1, T2. The only possible serial orders are: T1,
+        T2 or T2, T1. A serializable system must have the same result as running
+        either T1 then T2 or T2 then T1.
+      </li>
+    </ul>
+  </li>
+  <li>
+    Distributed Transactions with ACID:
+    <ul>
+      <li>
+        concurrency control (to provide isolation/serializability)
+        <ul>
+          <li>
+            Pessimistic: Acquire lock before using data. Wait if lock held by
+            something else (faster when frequent conflicts)
+          </li>
+          <li>
+            Optimistic: Don't acquire locks and just read/write to temporary
+            area. At the end check if another system is using the data at the
+            same time. If it was being used, abort. Faster when conflicts are
+            rare
+          </li>
+        </ul>
+      </li>
+      <li>atomic commit (to provide atomicity despite failure)</li>
+    </ul>
+  </li>
+  <li>
+    Two phase locking (Pessimistic)
+    <ul>
+      <li>Acquire lock before using record</li>
+      <li>
+        Hold lock until completely done/abort (needed as opposed to release
+        immediately after last usage of a record because an abort after that
+        could result in the need to rollback the entire transaction)
+      </li>
+      <li>
+        Easy to get deadlocks (db needs to smart to detect and abort
+        transactions)
+      </li>
+    </ul>
+  </li>
+  <li>
+    Two phase commits (used in many databases that are sharded + have
+    multi-record transactions):
+    <ul>
+      <li>
+        Phase One: Coordinator tells all participants the operations they need
+        to perform. Participants prepare locks/rollback resources as needed.
+        After receiving the response and about ready to commit, coordinator asks
+        all participants if they can commit. If participants says yes, they must
+        be remain in a state indefinitely where they can either do the operation
+        or rollback.
+      </li>
+      <li>
+        Phase Two:
+        <ul>
+          <li>
+            Coordinator receives yes from all participants → Sends message to
+            all participants to commit repeatedly until gets acknowledgement
+            from all participants.
+          </li>
+          <li>
+            Coordinator receives no from any participants → sends abort
+            repeatedly to all participants to rollback until gets
+            acknowledgement from all participants.
+          </li>
+        </ul>
+      </li>
+      <li>
+        Has issues when coordinator fails as participants cannot change their
+        locked without coordinator command to either proceed or abort. Generally
+        requires manual intervention
+      </li>
+    </ul>
+  </li>
+</ul>
+
+<p id="lecture_11" class="lecture_heading">
+  Lecture 11: Cache Consistency: Frangipani
+</p>
+<ul class="note_bullets">
+  <li>
+    Paper:
+    <a href="https://pdos.csail.mit.edu/6.824/papers/thekkath-frangipani.pdf"
+      >Frangipani</a
+    >; <a href="https://www.youtube.com/watch?v=-pKNCjUhPjQ">Lecture</a>
+  </li>
+  <li>
+    Networked file system with locking to guarantee cache coherence/atomicity
+    using Petal (block storage service)
+  </li>
+  <li>
+    Cache Coherence Rules
+    <ul>
+      <li>
+        No workstation can hold cached data without holding a lock (either busy
+        using it or idling holding it)
+        <ul>
+          <li>Acquire Lock by requesting from Petal → Read from Petal</li>
+          <li>
+            When planning to release lock → first write cached data to Petal
+          </li>
+        </ul>
+      </li>
+      <li>
+        Don't give up lock after finishing the usage of data (lazy about handing
+        locks back). Typical case where you creating files/directories and use
+        them immediately is made fast
+      </li>
+      <li>
+        Data is in RAM typically. Anything in cache is written to file every ~30
+        seconds
+      </li>
+      <li>
+        Lock server keeps track of locks for specific files and the workstation
+        that owns that lock
+      </li>
+      <li>
+        Example:
+        <ul>
+          <li>
+            Workstation 1: Request lock to lock server → receive Grant lock from
+            lock server
+          </li>
+          <li>
+            Workstation 1: Continues to hold lock even when not using it
+            directly
+          </li>
+          <li>
+            Workstation 2: Wants the lock so sents a Request lock to lock server
+          </li>
+          <li>
+            Lock Server: Checks table and sees lock owned by Workstation 1 so
+            sends Revoke to workstation 1
+          </li>
+          <li>
+            Workstation 1: Writes any cached data to write ahead log and then
+            Petal → Release lock message to Lock Server
+          </li>
+          <li>
+            Lock Server: receives Release lock from Workstation 1 → Sends Grant
+            lock to Workstation 2
+          </li>
+          <li>Workstation 2: Uses file</li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+  <li>
+    Crash Recovery
+    <ul>
+      <li>
+        A workstation must write to its own write ahead log in Petal (allows
+        other workstations to acccess it in case of crashes) before beginning
+        any write that it does
+      </li>
+      <li>
+        Log Entries will have a version number with version before write + 1
+      </li>
+      <li>
+        On crash, other computer checks log and knows the last one by
+        monotonically increasing log sequence number. Each entry has description
+        of file operations
+        <ul>
+          <li>
+            Replays the log entries into Petal and then tells Petal to release
+            the locks
+          </li>
+          <li>Only plays complete log entries (no partial writes)</li>
+          <li>
+            Ignores log entries that have version numbers <= version number in
+            Petal directly (only replays newer entries)
+          </li>
+          <li>
+            Recovery reads without acquiring locks even though other systems may
+            have the locks
+            <ul>
+              <li>
+                Cannot participate in locking because if power outage all
+                knowledge about locks could be lost and then the recovery
+                software cannot continue
+              </li>
+              <li>
+                This is okay because only 2 possibilities
+                <ul>
+                  <li>
+                    workstation had lock when crashed → nothing else could have
+                    written to it as lock was not acquired by any other system
+                    so we are safe. version number < version in log
+                  </li>
+                  <li>
+                    workstation gave up lock when crashed → must have already
+                    written to Petal so version number will be >= version in log
+                    and recovery does nothing
+                  </li>
+                </ul>
+              </li>
+            </ul>
+          </li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+</ul>
+
+<p id="lecture_10" class="lecture_heading">
+  Lecture 10: Cloud Replicated DB, Aurora
+</p>
+<ul class="note_bullets">
+  <li>
+    Paper:
+    <a href="https://pdos.csail.mit.edu/6.824/papers/aurora.pdf"
+      >Aurora (2017)</a
+    >; <a href="https://www.youtube.com/watch?v=jJSh54J1s5o">Lecture</a>
+  </li>
+  <li>
+    Cloud based database on AWS with quorum based reads/writes across multiple
+    availability zones
+  </li>
+  <li>
+    Quorums
+    <ul>
+      <li>
+        Consistency achived when <i>Vr + Vw > V</i>, where <i>Vr</i> is the
+        number of votes needed for a read request, <i>Vw</i> is the number of
+        votes needed for a write request and <i>V</i> is the number of copies
+      </li>
+      <li>
+        Aurora has a goal of having read availability when one availability zone
+        + 1 server is down. They achieve this by having 6 copies across 3
+        availability zones. Then a single zone + 1 server can be down and a read
+        quorum of 3 can be achieved. Write quorum must then be 4
+      </li>
+    </ul>
+  </li>
+  <li>
+    Time API has uncertainty.
+    <ul>
+      <li>
+        Start Rule: Transaction timestamp = time.now.latest.
+        <ul>
+          <li>Read only: start time</li>
+          <li>Read write: commit time</li>
+        </ul>
+      </li>
+      <li>
+        Commit Wait: Wait to commit a read write transaction until Transaction
+        timestamp < time.now.earliest
+      </li>
+    </ul>
+  </li>
+  <li>Used commerially by Google and also in Cockroachdb</li>
+</ul>
+
+<style>
+  #toc_container {
+    border: 1px solid #aaa;
+    display: table;
+    font-size: 85%;
+    margin-bottom: 1em;
+    padding: 10px;
+    width: auto;
+  }
+  .toc_title {
+    font-weight: 700;
+    text-align: center;
+  }
+  #toc_container li,
+  #toc_container ul,
+  #toc_container ul li {
+    list-style: circle outside none;
+  }
+  .lecture_heading {
+    margin-bottom: 0;
+    text-decoration: underline;
+  }
+  .note_bullets li,
+  .note_bullets ul,
+  .note_bullets {
+    margin-bottom: 0;
+  }
+</style>

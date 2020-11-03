@@ -177,20 +177,14 @@ func getPostMeta(fi os.FileInfo) (string, postMeta, *os.File, *bufio.Scanner) {
 	scanner := bufio.NewScanner(file)
 
 	blurbString := ""
-	start := false
 	for scanner.Scan() {
 		text := scanner.Text()
-		if text == "</blurb>" {
+		blurbString += text
+		if strings.Contains(blurbString, "</blurb>") {
 			break
 		}
-		if start {
-			blurbString += text
-		}
-		if text == "<blurb>" {
-			start = true
-		}
-
 	}
+	blurbString = strings.Trim(blurbString[7:len(blurbString)-8], " ") // remove <blurb> form the start and </blurb> from the end
 	metaInfo := postMeta{}
 	metaInfo.date = date
 	// len(id) - 5 to remove the .html
