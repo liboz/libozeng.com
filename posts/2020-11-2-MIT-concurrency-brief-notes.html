@@ -341,22 +341,54 @@
     </ul>
   </li>
   <li>
-    Time API has uncertainty.
+    Only stores "redo" logs as opposed to pages. Materializes pages when needed.
+    The log is the database
     <ul>
       <li>
-        Start Rule: Transaction timestamp = time.now.latest.
+        Writes through a single database, many read only databases
         <ul>
-          <li>Read only: start time</li>
-          <li>Read write: commit time</li>
+          <li>
+            Read only databases can directly interact with storage servers to
+            grab data. Also cache data, but lag to some extent
+          </li>
+          <li>
+            mini transactions/VDL numbers etc are used to ensure consistency for
+            the read only databases
+          </li>
         </ul>
       </li>
       <li>
-        Commit Wait: Wait to commit a read write transaction until Transaction
-        timestamp < time.now.earliest
+        Aurora typically does not use quorum reads as it keeps track of how far
+        in the log each storage server has reached and sends read requests to a
+        storage server whose log is up to date enough. Quorum reads used in
+        recovery
+        <ul>
+          <li>
+            Quorum reads are used in recovery to find the first missing log
+            entry amongst the quorumed servers and discards all entries
+            following that
+          </li>
+          <li>
+            Only log entries of uncommitted entries are discarded due to the
+            quorum write property
+          </li>
+        </ul>
+      </li>
+      <li>
+        Redo log:
+        <ul>
+          <li>Old value + new value</li>
+          <li>
+            Commit record (existence of this indicates if the transaction has
+            completed or not)
+          </li>
+        </ul>
       </li>
     </ul>
   </li>
-  <li>Used commerially by Google and also in Cockroachdb</li>
+  <li>
+    Network is the main bottleneck, dealt with via customized storage servers
+  </li>
 </ul>
 
 <style>

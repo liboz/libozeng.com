@@ -10,7 +10,31 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 )
+
+const layout = "2006-1-2"
+
+type FileInfo struct {
+	fileName string
+	date     time.Time
+}
+
+func findEndOfDate(fileName string) string {
+	count := 0
+	accumulatingStr := ""
+	for _, char := range fileName {
+		strChar := string(char)
+		if strChar == "-" {
+			count += 1
+			if count == 3 {
+				return accumulatingStr
+			}
+		}
+		accumulatingStr += strChar
+	}
+	panic("didn't find date like thing")
+}
 
 func indexLayoutStart(title string) string {
 	return `<!DOCTYPE html>
@@ -137,14 +161,22 @@ func generateIndex(postNameMap map[string]postMeta) {
 }
 
 func writePostsSection(b *bytes.Buffer, postNameMap map[string]postMeta) {
-	fileNames := make([]string, 0)
+	fileNames := make([]FileInfo, 0)
 	for id := range postNameMap {
-		fileNames = append(fileNames, id)
+		dateBase := findEndOfDate(id)
+		date, err := time.Parse(layout, dateBase)
+		if err != nil {
+			panic("Time parse error")
+		}
+		fileNames = append(fileNames, FileInfo{fileName: id, date: date})
 	}
-	sort.Strings(fileNames)
+
+	sort.Slice(fileNames, func(i, j int) bool {
+		return fileNames[i].date.Before(fileNames[j].date)
+	})
 
 	for i := len(fileNames) - 1; i >= 0; i-- {
-		id := fileNames[i]
+		id := fileNames[i].fileName
 		metaInfo := postNameMap[id]
 		b.WriteString(`
 			<div class="paragraph">
