@@ -10,6 +10,8 @@
     <li><a href="#lecture_12">Lecture 12: Distributed Transactions</a></li>
     <li><a href="#lecture_11">Lecture 11: Cache Consistency: Frangipani</a></li>
     <li><a href="#lecture_10">Lecture 10: Cloud Replicated DB, Aurora</a></li>
+    <li><a href="#lecture_9">Lecture 9: More Replication, CRAQ</a></li>
+    <li><a href="#lecture_8">Lecture 8: Zookeeper</a></li>
   </ul>
 </div>
 
@@ -324,6 +326,317 @@
     Cloud based database on AWS with quorum based reads/writes across multiple
     availability zones
   </li>
+  <li>
+    Quorums
+    <ul>
+      <li>
+        Consistency achived when <i>Vr + Vw > V</i>, where <i>Vr</i> is the
+        number of votes needed for a read request, <i>Vw</i> is the number of
+        votes needed for a write request and <i>V</i> is the number of copies
+      </li>
+      <li>
+        Aurora has a goal of having read availability when one availability zone
+        + 1 server is down. They achieve this by having 6 copies across 3
+        availability zones. Then a single zone + 1 server can be down and a read
+        quorum of 3 can be achieved. Write quorum must then be 4
+      </li>
+    </ul>
+  </li>
+  <li>
+    Only stores "redo" logs as opposed to pages. Materializes pages when needed.
+    The log is the database
+    <ul>
+      <li>
+        Writes through a single database, many read only databases
+        <ul>
+          <li>
+            Read only databases can directly interact with storage servers to
+            grab data. Also cache data, but lag to some extent
+          </li>
+          <li>
+            mini transactions/VDL numbers etc are used to ensure consistency for
+            the read only databases
+          </li>
+        </ul>
+      </li>
+      <li>
+        Aurora typically does not use quorum reads as it keeps track of how far
+        in the log each storage server has reached and sends read requests to a
+        storage server whose log is up to date enough. Quorum reads used in
+        recovery
+        <ul>
+          <li>
+            Quorum reads are used in recovery to find the first missing log
+            entry amongst the quorumed servers and discards all entries
+            following that
+          </li>
+          <li>
+            Only log entries of uncommitted entries are discarded due to the
+            quorum write property
+          </li>
+        </ul>
+      </li>
+      <li>
+        Redo log:
+        <ul>
+          <li>Old value + new value</li>
+          <li>
+            Commit record (existence of this indicates if the transaction has
+            completed or not)
+          </li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+  <li>
+    Network is the main bottleneck, dealt with via customized storage servers
+  </li>
+</ul>
+
+<p id="lecture_9" class="lecture_heading">Lecture 9: More Replication, CRAQ</p>
+<ul class="note_bullets">
+  <li>
+    Paper:
+    <a href="https://pdos.csail.mit.edu/6.824/papers/craq.pdf">CRAQ (2009)</a>;
+    <a href="https://www.youtube.com/watch?v=IXHzbCuADt0">Lecture</a> (majority
+    of the lecture is about Zookeeper, CRAQ part starts at ~57:20)
+  </li>
+  <li>
+    Improves on Chain Replication with higher read throughput that allows gives
+    applications the option for weaker consistency guarantees on non-committed
+    operations
+  </li>
+  <li>
+    Chain Replication
+    <ul>
+      <li>Linearly ordered sequence of servers</li>
+      <li>All writes are processed by head node</li>
+      <li>
+        Head node sends data to next node, which then sends data to the node
+        after it. Repeat until reaches tail node
+      </li>
+      <li>
+        Tail node sends acknowledgement that it has committed, which then
+        propagates via the chain back to the head. Then head can then respond to
+        the client that the write operation has completed
+      </li>
+      <li>All reads are processed by tail node</li>
+      <li>Strong consistency</li>
+    </ul>
+  </li>
+  <li>
+    Chain Replication with Apportioned Queries (CRAQ)
+    <ul>
+      <li>
+        Each node stores multiple version of an object
+        <ul>
+          <li>Has monotonically increasing version number</li>
+          <li>Also has clean/dirty flag</li>
+        </ul>
+      </li>
+      <li>
+        When a node receives an update from a node higher up in the chain (or
+        from client), appends that update to the object with an increased
+        version number
+        <ul>
+          <li>
+            Not last node → mark as dirty and propagate to node proceeding
+            itself
+          </li>
+          <li>
+            Last node → mark as clean and sends acknowledgement up the chain
+          </li>
+        </ul>
+      </li>
+      <li>
+        node receives an acknowledgement message for an object → mark object as
+        clean and can delete non-latest version of object
+      </li>
+      <li>
+        node receives a read request for an object
+        <ul>
+          <li>
+            Latest version is clean (aka has one version of the object) →
+            responds with the object. The tail is guaranteed not to have seen
+            the object yet
+          </li>
+          <li>
+            Latest version is dirty → sends message to tail to get the tail's
+            last commit number of the object and responds with that version of
+            the object (which must exist)
+          </li>
+          <li>
+            It is possible tail commits a new version between when it respond to
+            the node and when the node sends to the client. But this is still
+            strongly consistent because consistency is ordered to when tail
+            responded
+          </li>
+        </ul>
+      </li>
+      <li>
+        Can use as eventual consistency system by having nodes respond to read
+        requests by serving the latest version available. A request to a
+        different node may result in an older version of the object
+      </li>
+    </ul>
+  </li>
+  <li>
+    Faster than a system like Raft/Paxos as reads/writes are divided amongst
+    multiple servers
+    <ul>
+      <li>
+        Handles lagging servers poorly as a single lagging server would slow all
+        writes down
+      </li>
+    </ul>
+  </li>
+  <li>
+    Failure recovery is similar to Chain Replication in that every node knows
+    its predecessor and successor and can generally replace it with no extra
+    work (nodes internal in the chain failing may require resends)
+    <ul>
+      <li>
+        Not resistant to partition failure. General way to deal with this is a
+        configuration manager such as Zookeeper (or similar Raft/Paxos
+        replicated system) to keep track of which servers are alive and the
+        current setup of the chain
+      </li>
+    </ul>
+  </li>
+</ul>
+
+<p id="lecture_8" class="lecture_heading">Lecture 8: Zookeeper</p>
+<ul class="note_bullets">
+  <li>
+    Paper:
+    <a href="https://pdos.csail.mit.edu/6.824/papers/zookeeper.pdf"
+      >ZooKeeper (2010)</a
+    >;
+    <a href="https://www.youtube.com/watch?v=pbmyrNjzdDk">Lecture Part1</a>
+    <a href="https://www.youtube.com/watch?v=IXHzbCuADt0">Lecture Part2</a>
+    (until ~57:20)
+  </li>
+  <li>
+    Stand alone service used for coordination of other services. Uses ZAB, which
+    is similar to Raft/Paxos
+  </li>
+  <li>
+    Linearizability
+    <ul>
+      <li>
+        A history is linearizable if there exists a total order of operations
+        that matches real time and reads see proceeding writes in the order
+      </li>
+      <li>Cycles =/= not linearizable</li>
+      <li>Zookeeper does not use the standard definition of linearizability</li>
+      <li>
+        Zookeeper alows reads to return stale data (unless using <i>sync</i>)
+      </li>
+    </ul>
+  </li>
+  <li>
+    Zookeeper Guarantees
+    <ul>
+      <li>Writes are linearizable</li>
+      <li>
+        For any given client, Zookeeper executes operations in a client
+        specified order (FIFO)
+        <ul>
+          <li>
+            Writes: Client gives an ordering of the writes for the leader to
+            execute
+          </li>
+          <li>
+            Reads: A read has a given effective location in the log. Any future
+            read must be at least as up to date as that previous read. This
+            guarantee holds even when switching to a different replica
+            <ul>
+              <li>
+                When replica responds to a client read request, replica attaches
+                zxID of the previous entry to the response. Client remembers the
+                most recent zxID it sees. Client sends that id to future
+                requests
+              </li>
+              <li>
+                Also applies to reads followed by writes. Read your own writes
+              </li>
+            </ul>
+          </li>
+        </ul>
+      </li>
+      <li>
+        <i>sync</i> + FIFO client order allows one to see the most recent data
+        if needed
+      </li>
+    </ul>
+  </li>
+  <li>
+    Strategies
+    <ul>
+      <li>
+        Ready file (acts like a lock): before modifying configuration, delete
+        "ready" file. Then make changes and at the end recreate "ready" file.
+        This allows other systems to know that the configuration is in a good
+        state
+      </li>
+      <li>
+        When trying to read configurations, read for "ready" file existence (to
+        know the configuration is good) with a watch to be notified of any
+        change (and thus know the configuration is stale). Watches not carried
+        over by replicate failure so need to restart with watches when replicate
+        crashes (client is notified of this)
+      </li>
+      <li>
+        Most operations have version number so zookeeper only does an operation
+        when the current version number = version sent via request
+      </li>
+      <li>
+        while true: getData(id) -> if setData(id, new_value ,version + 1): break
+        <ul>
+          <li>mini-transactions</li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+  <li>
+    Thundering herd
+    <ul>
+      <li>
+        Because typically one uses version numbers to prevent running with stale
+        data, it is common to implment with a loop. Many many clients trying at
+        the same time will result in a thundering herd
+        <ul>
+          <li>
+            General solution: Randomized Exponentially increasing delays between
+            retries
+          </li>
+          <li>
+            Ephemeral nodes: Tries to create ephemeral, but if it fails check if
+            exists with a watch to know when the lock is released
+          </li>
+          <li>
+            Sequential file: Check if previously number file in the sequence
+            exists. Only notified when previous client's lock is released so no
+            need to retry except when you know it will work for sure
+          </li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+</ul>
+
+<p id="lecture_6_7" class="lecture_heading">
+  Lecture 6-7: Fault Tolerance: Raft
+</p>
+<ul class="note_bullets">
+  <li>
+    Paper:
+    <a href="https://pdos.csail.mit.edu/6.824/papers/raft-extended.pdf"
+      >Aurora (2017)</a
+    >; <a href="https://www.youtube.com/watch?v=64Zp3tzNbpE">Lecture Part1</a>
+    <a href="https://www.youtube.com/watch?v=4r8Mz3MMivY">Lecture Part2</a>
+  </li>
+  <li>Replicated State machine</li>
   <li>
     Quorums
     <ul>
