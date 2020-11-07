@@ -637,71 +637,9 @@
     <a href="https://www.youtube.com/watch?v=4r8Mz3MMivY">Lecture Part2</a>
   </li>
   <li>Replicated State machine</li>
-  <li>
-    Quorums
-    <ul>
-      <li>
-        Consistency achived when <i>Vr + Vw > V</i>, where <i>Vr</i> is the
-        number of votes needed for a read request, <i>Vw</i> is the number of
-        votes needed for a write request and <i>V</i> is the number of copies
-      </li>
-      <li>
-        Aurora has a goal of having read availability when one availability zone
-        + 1 server is down. They achieve this by having 6 copies across 3
-        availability zones. Then a single zone + 1 server can be down and a read
-        quorum of 3 can be achieved. Write quorum must then be 4
-      </li>
-    </ul>
-  </li>
-  <li>
-    Only stores "redo" logs as opposed to pages. Materializes pages when needed.
-    The log is the database
-    <ul>
-      <li>
-        Writes through a single database, many read only databases
-        <ul>
-          <li>
-            Read only databases can directly interact with storage servers to
-            grab data. Also cache data, but lag to some extent
-          </li>
-          <li>
-            mini transactions/VDL numbers etc are used to ensure consistency for
-            the read only databases
-          </li>
-        </ul>
-      </li>
-      <li>
-        Aurora typically does not use quorum reads as it keeps track of how far
-        in the log each storage server has reached and sends read requests to a
-        storage server whose log is up to date enough. Quorum reads used in
-        recovery
-        <ul>
-          <li>
-            Quorum reads are used in recovery to find the first missing log
-            entry amongst the quorumed servers and discards all entries
-            following that
-          </li>
-          <li>
-            Only log entries of uncommitted entries are discarded due to the
-            quorum write property
-          </li>
-        </ul>
-      </li>
-      <li>
-        Redo log:
-        <ul>
-          <li>Old value + new value</li>
-          <li>
-            Commit record (existence of this indicates if the transaction has
-            completed or not)
-          </li>
-        </ul>
-      </li>
-    </ul>
-  </li>
-  <li>
-    Network is the main bottleneck, dealt with via customized storage servers
-  </li>
+  <li></li>
+  <li></li>
+  <li></li>
 </ul>
 
 <style>
