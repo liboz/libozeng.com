@@ -637,9 +637,209 @@
     <a href="https://www.youtube.com/watch?v=4r8Mz3MMivY">Lecture Part2</a>
   </li>
   <li>Replicated State machine</li>
-  <li></li>
-  <li></li>
-  <li></li>
+  <li>
+    Must avoid Split Brain against network partition
+    <ul>
+      <li>Non-faulty networks: Communication failure → server down</li>
+      <li>Human Intervention</li>
+      <li>
+        Majority Voting (sometimes called quorum systems): Odd number of servers
+        <ul>
+          <li>2F+1 servers → F failures and can still continue</li>
+          <li>At most one paritition can have a majority of servers</li>
+          <li>
+            Any two majorities must overlap in at least one server (just count
+            it! Pidgeonhole principle)
+          </li>
+          <li>After being elected, majority includes leader itself</li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+  <li>
+    Some similar systems
+    <ul>
+      <li>Paxos: Considered very challenging to understand</li>
+      <li>Viewstamp Replication</li>
+    </ul>
+  </li>
+  <li>
+    Log: Leader gives an order for client operations so all clients see the same
+    order
+    <ul>
+      <li>Persisted log allows for a server to recover after crashing</li>
+      <li>
+        Logs tails may diverge (i.e. leader crashes before sending them out to
+        all the servers)
+      </li>
+    </ul>
+  </li>
+  <li>
+    Leaderless systems exist, but require more messages (multiple rounds of
+    voting) and are harder to reason about
+  </li>
+  <li>Each term has <b>at most</b> one leader</li>
+  <li>
+    If server has not heard from current leader after election timeout has run
+    out, it will start an election
+    <ul>
+      <li>Increments term</li>
+      <li>Votes for itself</li>
+      <li>Generates a new election timeout randomly</li>
+      <li>Sends out RequestVotes RPC to all other servers</li>
+      <li>
+        If receieves votes from a majority of servers (including itself) →
+        become leader
+      </li>
+      <li>
+        Each server votes at most once per term (stored on disk to avoid
+        forgetting)
+      </li>
+      <li>
+        If AppendEntries RPC received from current leader (higher/equal term to
+        itself), conver to Follower
+      </li>
+      <li>
+        If election timeout elapses →start new election
+        <ul>
+          <li>
+            Happens when vote is split up and not decisive or partitioned
+            network
+          </li>
+          <li>
+            Raft reduces the odds of split votes is by
+            <b>randomizing</b> election timeouts so all servers do not try to
+            start an election at the same exact time. This makes it so that one
+            server will likely be able to send out a full round of vote requests
+            before another server attempts to do the same. Other servers will
+            all vote for the first server
+          </li>
+          <li>
+            Average time of failures for a single server≫ Election timeout ≫
+            heartbeat interval
+          </li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+  <li>
+    Candidate after winning election sends out heartbeat to all other servers.
+    Implicitly indicates they are the leader because there is at most one leader
+    for a single term.
+    <ul>
+      <li>
+        Heartbeats supress candidates from popping up because it resets election
+        timeout of followers/candidates who receive messages
+      </li>
+    </ul>
+  </li>
+  <li>
+    Who can be leader (how will servers decide whether to vote a certain other
+    server as a leader or not)?
+    <ul>
+      <li>Cannot merely use longest log (in Raft)</li>
+      <li>Must have term >= server's term</li>
+      <li>
+        Must have log at least as up to date as the server's own log
+        <ul>
+          <li>Compare last log entry</li>
+          <li>Higher term log entry is more up to date</li>
+          <li>If same term, larger log entry index is more up to date</li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+  <li>
+    <b>Log Matching Property</b>
+    <ol>
+      <li>
+        Log entries in two different logs with the same index and same term are
+        the same log entry
+      </li>
+      <li>
+        If a log entry is matching all preceding entries are also matching
+      </li>
+    </ol>
+    <ul>
+      <li>
+        By default, the leader finds the last common log entry by decrementing
+        its count of where the follower is by one and sending that index + term
+        to the follower. The follower then checks to see if it has a log entry
+        there with the same index + term (which then must be the same by the Log
+        Matching Property)
+        <ul>
+          <li>This can be slow when a follower gets very far behind</li>
+          <li>
+            Alternate Scheme for higher performance when very far behind
+            <ul>
+              rejection from follower includes:
+              <li>XTerm: term in the conflicting entry (if any)</li>
+              <li>XIndex: index of first entry with that term (if any)</li>
+              <li>XLen: log length</li>
+            </ul>
+            <ol>
+              <li>
+                Case 1 (leader doesn't have XTerm): nextIndex = XIndex (can
+                reset to the last common term)
+              </li>
+              <li>
+                Case 2 (leader has XTerm): nextIndex = leader's last entry for
+                XTerm (i.e. when a follower has more log entries in a certain
+                term than a leader, those entries should be deleted and thus go
+                back to leader's last entry for XTerm)
+              </li>
+              <li>
+                Case 3 (follower's log is too short): nextIndex = XLen (try to
+                match at last entry of follower, and if needed go to case1/2)
+              </li>
+            </ol>
+          </li>
+          <li>
+            Could also in theory use something like binary search, which might
+            be faster
+          </li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+  <li>
+    Persistence
+    <ul>
+      Relatively costly, so only persist the minimal number of things
+      <li>
+        currentTerm: Required to prevent two leaders from existing in the same
+        term (due to forgetting about a previous term)
+      </li>
+      <li>
+        votedFor: Required to prevent voting for multiple candidates in a single
+        term
+      </li>
+      <li>
+        log: Required for the information to reconstruct the application state
+      </li>
+      <li>
+        Other things such as lastApplied do not need to be persisted as they can
+        be reconstructed by looking at own log + responses from ApplyEntries.
+        Leader will re-execute entries after a restart. Application might need
+        logic to ignore duplicates
+      </li>
+    </ul>
+  </li>
+  <li>
+    Log Compaction/Snapshots
+    <ul>
+      <li>
+        Application is asked to save its state as of a particular log entry as
+        state is generally smaller than log of changes
+      </li>
+      <li>Raft can then discard all earlier entries</li>
+      <li>
+        If earlier entries are needed for AppendEntries/restoring another
+        server's state, use InstallSnapshot RPC
+      </li>
+    </ul>
+  </li>
+  <li>To be added: Membership changes</li>
 </ul>
 
 <style>
