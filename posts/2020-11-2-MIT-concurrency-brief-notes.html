@@ -12,6 +12,11 @@
     <li><a href="#lecture_10">Lecture 10: Cloud Replicated DB, Aurora</a></li>
     <li><a href="#lecture_9">Lecture 9: More Replication, CRAQ</a></li>
     <li><a href="#lecture_8">Lecture 8: Zookeeper</a></li>
+    <li><a href="#lecture_6_7">Lecture 6-7: Fault Tolerance: Raft</a></li>
+    <li><a href="#lecture_5">Lecture 5: Go, Threads, and Raft</a></li>
+    <li><a href="#lecture_4">Lecture 4: Primary-Backup Replication</a></li>
+    <li><a href="#lecture_3">Lecture 3: GFS</a></li>
+    <li><a href="#lecture_2">Lecture 2: RPC and Threads</a></li>
   </ul>
 </div>
 
@@ -840,6 +845,214 @@
     </ul>
   </li>
   <li>To be added: Membership changes</li>
+</ul>
+
+<p id="lecture_5" class="lecture_heading">Lecture 5: Go, Threads, and Raft</p>
+<ul class="note_bullets">
+  <li>add <i>-race</i> for go's race detection</li>
+  <li>
+    Closure for goroutines: Need to pass in changing variables explicitly from
+    the outside go func(i int){ log.Print(i) }(i)
+  </li>
+  <li>
+    SIGQUIT
+    <ul>
+      <li>
+        the default SIGQUIT handler for Go prints stack traces for all
+        goroutines (and then exits)
+      </li>
+      <li>Ctrl+\ will send SIGQUIT</li>
+    </ul>
+  </li>
+  <li>Kill a single goroutine with <i>kill -QUIT pid</i></li>
+</ul>
+
+<p id="lecture_4" class="lecture_heading">
+  Lecture 4: Primary-Backup Replication
+</p>
+<ul class="note_bullets">
+  <li>
+    Paper:
+    <a href="https://pdos.csail.mit.edu/6.824/papers/vm-ft.pdf">
+      Fault-Tolerant Virtual Machines (2010)</a
+    >;
+    <a href="https://www.youtube.com/watch?v=M_teob23ZzY">Lecture</a>
+  </li>
+  <li>
+    Use deterministic replay of state changes to a single backup to allow for
+    Fault tolerant VMs
+  </li>
+  <li>
+    Main requirement: if the backup VM ever takes over after a failure of the
+    primary, the backup VM will continue executing in a way that is entirely
+    consistent with all outputs that the primary VM has sent to the external
+    world.
+    <ul>
+      <li>
+        Achieved by delaying output from primary until the backup has received
+        the information needed to replay up to that output operation. Backup
+        replays all operations as it receives them (discards output though)
+      </li>
+      <li>
+        With a log, that means primary does not send output to the outside world
+        until after backup has received and acknolwedged all entries up to that
+        output's log entry. Primary can continue executing
+      </li>
+      <li>
+        Non-deterministic actions are done on primary and the result sends the
+        result to the backup, which then uses the result
+      </li>
+      <li>
+        Could consider a chain replication scheme instead of delaying output
+        from the primary
+      </li>
+    </ul>
+  </li>
+  <li>
+    Use heartbeats to determine if other server is alive
+    <ul>
+      <li>
+        Must be careful as this can result in split brain if not careful when
+        the backup think it's the primary and the primary thinks the backup is
+        dead
+      </li>
+      <li>
+        Split brain avoided by executing atomic test-and-set operation (returns
+        true to only the first instance to try it) on shared storage. Operation
+        succeeds → can go live. Fails →must abort.
+      </li>
+      <li>Duplicate output can happen. TCP etc should be able to handle it</li>
+    </ul>
+  </li>
+  <li>
+    Alternatively, send over the entire state instead of state changes
+    <ul>
+      <li>
+        This paper is only single core and has issues with how to switch to
+        multicore
+      </li>
+      <li>
+        Sending over entire state would make the problem much easier to handle
+      </li>
+    </ul>
+  </li>
+</ul>
+
+<p id="lecture_3" class="lecture_heading">Lecture 3: GFS</p>
+<ul class="note_bullets">
+  <li>
+    Paper:
+    <a href="https://pdos.csail.mit.edu/6.824/papers/gfs.pdf">GFS (2003)</a>;
+    <a href="https://www.youtube.com/watch?v=EpIgvowZr00">Lecture</a>
+  </li>
+  <li>
+    Distributed file system built from many commodity servers to primarily
+    handle sequential writes to large files
+  </li>
+  <li>
+    Some classic issues
+    <ul>
+      <li>
+        Performance → sharding over many machines → get many faults → need fault
+        tolerance via replication → have potential for inconsistency → better
+        consistency → low performance
+      </li>
+    </ul>
+  </li>
+  <li>
+    GFS
+    <ul>
+      <li>
+        Many chunk servers that store actual data. One master keeps track of all
+        metadata in two tables. Stored in both memory + disk.
+        <ul>
+          <li>File names mapped to array of chunk handles (non-volatile)</li>
+          <li>
+            Chunk Handles mapped to list of chunk servers (volatile, can ask all
+            chunk servers what handles they have), version number
+            (non-volatile), primary chunk server (volatile, just wait the chunk
+            expiration), primary lease expiration time (volatile)
+          </li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+  <li>
+    Operations
+    <ul>
+      <li>
+        Read:
+        <ul>
+          <li>Client sends filename + offset in request to master</li>
+          <li>
+            Client gets list of chunk servers from master (cached by client)
+          </li>
+          <li>
+            Client talks to one of the chunk servers (tries to pick closest) and
+            gets the data back
+          </li>
+        </ul>
+      </li>
+      Write:
+      <ul>
+        <li>
+          If no primary
+          <ul>
+            <li>
+              finds chunk servers with the most up to date chunk (must match or
+              be larger than the version number stored by the master), does not
+              respond until it can figure this out.
+            </li>
+            <li>
+              Picks a primary from the list of servers that have the most up to
+              date chunk.
+            </li>
+            <li>
+              Sends information to chunk servers of who is in charge + lease
+              including new version number. When master writes version number to
+              disk is unclear
+            </li>
+            <li>
+              If master cannot communicate with primary, it can wait lease
+              duration and then designate a new primary, avoiding split brain
+            </li>
+          </ul>
+        </li>
+        <li>
+          Client sends data to all replicas (maybe just closest and then chain
+          replication)
+        </li>
+        <li>
+          Once all replicas have data, client tells primary to write the data
+        </li>
+        <li>
+          Primary picks an offset, writes the data, and tells the replicas the
+          offset and to write the data
+        </li>
+        <li>
+          Replicas respond to primary and primary gets "yes" from all replicas,
+          it responds to client that the operation has succeeded
+        </li>
+        <li>
+          If replicas don't all respond "yes", primary responds no. Client
+          should retry sequence from the start.
+        </li>
+        <li>
+          Note that a single entry can appear multiple times or not at all due
+          to retries and potentially different orders depending on the replica
+          it talks to. Client must handle this
+        </li>
+      </ul>
+    </ul>
+  </li>
+</ul>
+
+<p id="lecture_2" class="lecture_heading">Lecture 2: RPC and Threads</p>
+<ul class="note_bullets">
+  <li>Threads</li>
+  <li>Event driven</li>
+  <li>locks vs channels</li>
+  <li></li>
 </ul>
 
 <style>
