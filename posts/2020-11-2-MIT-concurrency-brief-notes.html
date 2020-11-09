@@ -1049,10 +1049,23 @@
 
 <p id="lecture_2" class="lecture_heading">Lecture 2: RPC and Threads</p>
 <ul class="note_bullets">
-  <li>Threads</li>
-  <li>Event driven</li>
-  <li>locks vs channels</li>
-  <li></li>
+  <li>
+    Threads: Share memory/cache. Can be very helpful, but must be careful about
+    mutations.
+    <ul>
+      <li>Use locks to solve</li>
+      <li>
+        Change program to not share data (for increment common variables just
+        increment separate variables and then increment all at the end)
+      </li>
+    </ul>
+  </li>
+  <li>
+    Deadlocks: One thread holding a lock is waiting for another thread to
+    release a lock. Unfortunately, other thread waiting for first thread to
+    release the lock it is holding
+  </li>
+  <li>Channels: Pass messages to share data</li>
 </ul>
 
 <style>
