@@ -17,6 +17,7 @@
     <li><a href="#lecture_4">Lecture 4: Primary-Backup Replication</a></li>
     <li><a href="#lecture_3">Lecture 3: GFS</a></li>
     <li><a href="#lecture_2">Lecture 2: RPC and Threads</a></li>
+    <li><a href="#lecture_1">Lecture 1: Introduction</a></li>
   </ul>
 </div>
 
@@ -207,8 +208,9 @@
     Cache Coherence Rules
     <ul>
       <li>
-        No workstation can hold cached data without holding a lock (either busy
-        using it or idling holding it)
+        No workstation can hold cached data without holding a lock, but servers
+        don't give up lock after they are done using the data to optimize for
+        the typical case where one creates files and immediately use it
         <ul>
           <li>Acquire Lock by requesting from Petal → Read from Petal</li>
           <li>
@@ -217,13 +219,8 @@
         </ul>
       </li>
       <li>
-        Don't give up lock after finishing the usage of data (lazy about handing
-        locks back). Typical case where you creating files/directories and use
-        them immediately is made fast
-      </li>
-      <li>
-        Data is in RAM typically. Anything in cache is written to file every ~30
-        seconds
+        Data is typically in RAM, but anything in cache is written to file every
+        ~30 seconds
       </li>
       <li>
         Lock server keeps track of locks for specific files and the workstation
@@ -234,18 +231,13 @@
         <ul>
           <li>
             Workstation 1: Request lock to lock server → receive Grant lock from
-            lock server
+            lock server → uses files but continues holding lock even when not
+            using it directly
           </li>
+          <li>Workstation 2: Sends a Request lock to lock server</li>
           <li>
-            Workstation 1: Continues to hold lock even when not using it
-            directly
-          </li>
-          <li>
-            Workstation 2: Wants the lock so sents a Request lock to lock server
-          </li>
-          <li>
-            Lock Server: Checks table and sees lock owned by Workstation 1 so
-            sends Revoke to workstation 1
+            Lock Server: Checks table → lock owned by Workstation 1 → sends
+            Revoke to workstation 1
           </li>
           <li>
             Workstation 1: Writes any cached data to write ahead log and then
@@ -253,9 +245,8 @@
           </li>
           <li>
             Lock Server: receives Release lock from Workstation 1 → Sends Grant
-            lock to Workstation 2
+            lock to Workstation 2 and Workstation 2 can use the file
           </li>
-          <li>Workstation 2: Uses file</li>
         </ul>
       </li>
     </ul>
@@ -266,48 +257,37 @@
       <li>
         A workstation must write to its own write ahead log in Petal (allows
         other workstations to acccess it in case of crashes) before beginning
-        any write that it does
+        any write that it does. Log Entries have version number with version
+        before write + 1
       </li>
       <li>
-        Log Entries will have a version number with version before write + 1
-      </li>
-      <li>
-        On crash, other computer checks log and knows the last one by
+        On crash, other computer looks at log and finds the last entry via the
         monotonically increasing log sequence number. Each entry has description
         of file operations
         <ul>
           <li>
-            Replays the log entries into Petal and then tells Petal to release
-            the locks
+            Replays any complete log entries (no partial writes) into Petal and
+            then tells Petal to release the locks
           </li>
-          <li>Only plays complete log entries (no partial writes)</li>
           <li>
-            Ignores log entries that have version numbers <= version number in
-            Petal directly (only replays newer entries)
+            Ignores log entries that have version numbers ≤ version number in
+            Petal (only replays newer entries)
           </li>
           <li>
             Recovery reads without acquiring locks even though other systems may
-            have the locks
+            have the locks. (Required because if power outage knowledge about
+            locks is completely lost and recovery software must continue). This
+            is okay because there are only two possibilities:
             <ul>
               <li>
-                Cannot participate in locking because if power outage all
-                knowledge about locks could be lost and then the recovery
-                software cannot continue
+                workstation had lock when crashed → nothing else could have
+                written to it as lock was not acquired by any other system so we
+                are safe. version number < version in log
               </li>
               <li>
-                This is okay because only 2 possibilities
-                <ul>
-                  <li>
-                    workstation had lock when crashed → nothing else could have
-                    written to it as lock was not acquired by any other system
-                    so we are safe. version number < version in log
-                  </li>
-                  <li>
-                    workstation gave up lock when crashed → must have already
-                    written to Petal so version number will be >= version in log
-                    and recovery does nothing
-                  </li>
-                </ul>
+                workstation gave up lock when crashed → must have already
+                written to Petal so version number will be ≥ version in log and
+                recovery does nothing
               </li>
             </ul>
           </li>
@@ -414,8 +394,11 @@
   <li>
     Chain Replication
     <ul>
-      <li>Linearly ordered sequence of servers</li>
-      <li>All writes are processed by head node</li>
+      <li>
+        Linearly ordered sequence of servers where all writes are processed by
+        head node and all reads are processed by tail node. Has strong
+        consistency
+      </li>
       <li>
         Head node sends data to next node, which then sends data to the node
         after it. Repeat until reaches tail node
@@ -425,18 +408,15 @@
         propagates via the chain back to the head. Then head can then respond to
         the client that the write operation has completed
       </li>
-      <li>All reads are processed by tail node</li>
-      <li>Strong consistency</li>
     </ul>
   </li>
   <li>
     Chain Replication with Apportioned Queries (CRAQ)
     <ul>
       <li>
-        Each node stores multiple version of an object
+        Each node stores multiple versions of an object
         <ul>
-          <li>Has monotonically increasing version number</li>
-          <li>Also has clean/dirty flag</li>
+          <li>monotonically increasing version number + clean/dirty flag</li>
         </ul>
       </li>
       <li>
@@ -486,20 +466,17 @@
     </ul>
   </li>
   <li>
-    Faster than a system like Raft/Paxos as reads/writes are divided amongst
-    multiple servers
+    Vs Raft/Paxos
     <ul>
       <li>
-        Handles lagging servers poorly as a single lagging server would slow all
-        writes down
+        Faster than a system like Raft/Paxos as reads/writes are divided amongst
+        multiple servers, but handles lagging servers poorly
       </li>
-    </ul>
-  </li>
-  <li>
-    Failure recovery is similar to Chain Replication in that every node knows
-    its predecessor and successor and can generally replace it with no extra
-    work (nodes internal in the chain failing may require resends)
-    <ul>
+      <li>
+        Failure recovery is similar to Chain Replication in that every node
+        knows its predecessor and successor and can generally replace it with no
+        extra work (nodes internal in the chain failing may require resends)
+      </li>
       <li>
         Not resistant to partition failure. General way to deal with this is a
         configuration manager such as Zookeeper (or similar Raft/Paxos
@@ -562,9 +539,7 @@
                 most recent zxID it sees. Client sends that id to future
                 requests
               </li>
-              <li>
-                Also applies to reads followed by writes. Read your own writes
-              </li>
+              <li>Applies to reads followed by writes. Read your own writes</li>
             </ul>
           </li>
         </ul>
@@ -596,9 +571,9 @@
         when the current version number = version sent via request
       </li>
       <li>
-        while true: getData(id) -> if setData(id, new_value ,version + 1): break
+        while true: getData(id) → if setData(id, new_value ,version + 1): break
         <ul>
-          <li>mini-transactions</li>
+          <li>mini-transaction</li>
         </ul>
       </li>
     </ul>
@@ -688,10 +663,10 @@
     If server has not heard from current leader after election timeout has run
     out, it will start an election
     <ul>
-      <li>Increments term</li>
-      <li>Votes for itself</li>
-      <li>Generates a new election timeout randomly</li>
-      <li>Sends out RequestVotes RPC to all other servers</li>
+      <li>
+        Increments term → Votes for itself → Generates a new election timeout
+        interval randomly →Sends out RequestVotes RPC to all other servers
+      </li>
       <li>
         If receieves votes from a majority of servers (including itself) →
         become leader
@@ -702,7 +677,7 @@
       </li>
       <li>
         If AppendEntries RPC received from current leader (higher/equal term to
-        itself), conver to Follower
+        itself), convert to Follower
       </li>
       <li>
         If election timeout elapses →start new election
@@ -890,17 +865,14 @@
     <ul>
       <li>
         Achieved by delaying output from primary until the backup has received
-        the information needed to replay up to that output operation. Backup
-        replays all operations as it receives them (discards output though)
+        the information needed to replay up to that output operation and has
+        knowledged all entries up to that log's entry. Primary can continue
+        executing, but cannot send output. Backup eventually replays all
+        operations (discards output though)
       </li>
       <li>
-        With a log, that means primary does not send output to the outside world
-        until after backup has received and acknolwedged all entries up to that
-        output's log entry. Primary can continue executing
-      </li>
-      <li>
-        Non-deterministic actions are done on primary and the result sends the
-        result to the backup, which then uses the result
+        Non-deterministic actions are done on primary and the result is sent to
+        the backup, which then uses the result
       </li>
       <li>
         Could consider a chain replication scheme instead of delaying output
@@ -919,7 +891,7 @@
       <li>
         Split brain avoided by executing atomic test-and-set operation (returns
         true to only the first instance to try it) on shared storage. Operation
-        succeeds → can go live. Fails →must abort.
+        succeeds → can go live. Fails →must abort. Storage acts as a tiebreaker
       </li>
       <li>Duplicate output can happen. TCP etc should be able to handle it</li>
     </ul>
@@ -950,14 +922,9 @@
     handle sequential writes to large files
   </li>
   <li>
-    Some classic issues
-    <ul>
-      <li>
-        Performance → sharding over many machines → get many faults → need fault
-        tolerance via replication → have potential for inconsistency → better
-        consistency → low performance
-      </li>
-    </ul>
+    Classic Issue: Performance → sharding over many machines → get many faults →
+    need fault tolerance via replication → have potential for inconsistency →
+    better consistency → low performance
   </li>
   <li>
     GFS
@@ -1066,6 +1033,83 @@
     release the lock it is holding
   </li>
   <li>Channels: Pass messages to share data</li>
+</ul>
+
+<p id="lecture_1" class="lecture_heading">Lecture 1: Introduction</p>
+<ul class="note_bullets">
+  <li>
+    Paper:
+    <a href="https://pdos.csail.mit.edu/6.824/papers/mapreduce.pdf"
+      >MapReduce (2004)</a
+    >;
+    <a href="https://www.youtube.com/watch?v=cQP8WApzIQQ">Lecture</a>
+  </li>
+  <li>
+    Distributed file system built from many commodity servers to primarily
+    handle sequential writes to large files
+  </li>
+  <li>
+    Distributed Systems
+    <ul>
+      <li>
+        Set of cooperating computers communicating over network to do certain
+        tasks
+      </li>
+      <li>
+        Build for parallelism, fault tolerance, physical separation, and for
+        security/isolation reasons
+      </li>
+      <li>
+        Challenges: concurrency, partial failures (instead of full failure or
+        full success), performance (hard to get linear scaling)
+      </li>
+    </ul>
+  </li>
+  <li>
+    MapReduce
+    <ul>
+      <li>
+        Goal for non-distributed system experts to be able to use distributed
+        system infra to run large jobs
+      </li>
+      <li>
+        Use "Map" to generate intermediate key/value pairs, and then "Reduce" to
+        generate a final set of values
+        <ul>
+          <li>Map: (key1,value2) → (key2, value2)</li>
+          <li>Reduce: (key2, list value2) → (key2, value3)</li>
+        </ul>
+      </li>
+      <li>
+        All Maps can run in parallel and so can all Reduces. N workers will give
+        ~Nx performance
+      </li>
+      <li>
+        Tasks are deterministic and repeatable. Many small tasks to avoid one
+        task dominating the time
+      </li>
+      <li>Limitations: No state or real-time streaming processing</li>
+    </ul>
+  </li>
+  <li>
+    Fault Tolerance
+    <ul>
+      <li>
+        Single master. Only fault tolerance is snapshotting and restarting from
+        snapshot
+      </li>
+      <li>
+        Master pings workers periodically, but if worker does not respond in a
+        timely matter, the master marks the worker as failed and gives the tasks
+        the worker was doing to another worker. Resilient to worker failure
+      </li>
+      <li>
+        When map worker finishes job, sends master list of output files. Master
+        records filenames. Reduce worker's finished results are handled via an
+        atomic rename so multiple copies are not made
+      </li>
+    </ul>
+  </li>
 </ul>
 
 <style>
