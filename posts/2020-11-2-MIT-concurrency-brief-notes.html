@@ -4,6 +4,12 @@
   <p class="toc_title">Contents</p>
   <ul>
     <li>
+      <a href="#lecture_16"
+        >Lecture 16: Cache Consistency: Memcached at Facebook</a
+      >
+    </li>
+    <li><a href="#lecture_15">Lecture 15: Big Data: Spark</a></li>
+    <li>
       <a href="#lecture_14">Lecture 14: Optimistic Concurrency Control</a>
     </li>
     <li><a href="#lecture_13">Lecture 13: Spanner</a></li>
@@ -20,6 +26,180 @@
     <li><a href="#lecture_1">Lecture 1: Introduction</a></li>
   </ul>
 </div>
+
+<p id="lecture_16" class="lecture_heading">
+  Lecture 16: Cache Consistency: Memcached at Facebook
+</p>
+<ul class="note_bullets">
+  <li>
+    Paper:
+    <a href="https://pdos.csail.mit.edu/6.824/papers/memcache-fb.pdf"
+      >Memcached at Facebook (2013)</a
+    >; <a href="https://www.youtube.com/watch?v=Myp8z0ybdzM">Lecture</a>
+  </li>
+  <li>Handling issues while scaling memcached</li>
+  <li>
+    Standard read:
+    <ul>
+      <li>
+        Read: try get from memcached → if return null → fetch from DB → stored
+        returned value in memcached
+      </li>
+      <li>
+        Write: send new value to DB → delete from memcached (invalidate scheme)
+      </li>
+      <li>
+        Could alternatively, send updated data to memcached on write instead of
+        deleting from memcached (harder to get right)
+      </li>
+      <li>
+        Beccause all writes go through the primary region, a write stemming from
+        the secondary region might not get propagated to the secondary region's
+        database before the cache is invalidated. Solved by adding a key as
+        "remote" which tells future clients to look at the primary region when
+        failing to get a hit in memcached
+      </li>
+    </ul>
+  </li>
+  <li>
+    Performance
+    <ul>
+      <li>
+        Partition
+        <ul>
+          <li>Keep one copy of each key means its RAM efficient</li>
+          <li>Not good for hot, very frequently accessed keys</li>
+          <li>Clients talk to every partition</li>
+        </ul>
+      </li>
+      <li>
+        Replication
+        <ul>
+          <li>Good when handling very hot keys</li>
+          <li>Clients talk to one server only</li>
+          <li>Handle a lot less total data</li>
+        </ul>
+      </li>
+      <li>
+        Starting new memcached cluster is slow
+        <ul>
+          <li>
+            On miss for "cold" clusters, tries local memcached first, but then
+            tries a different cluster. If it finds in a hot cluster, will add to
+            the cold cluster otherwise query database
+          </li>
+          <li>
+            Prevent inconsistency with database updates by adding a non-zero
+            "hold" time to add operations after a delete
+          </li>
+        </ul>
+      </li>
+      <li>
+        Prevent thundering herd after cache invalidation by using a "lease".
+        <ul>
+          <li>First client to get a miss will get a lease # from memcached</li>
+          <li>
+            Other front ends getting a miss will be told to wait because
+            memcached has a lease #
+          </li>
+          <li>Is a lease bcause eventually it will time out</li>
+          <li>
+            Makes it so that only a single client actually queries the database
+          </li>
+          <li>
+            Lease mechanism also used to prevent out of order writes after a
+            delete (cache invalidation). Cache invalidation invalidates any
+            outstanding leases so writer cannot write with stale data
+          </li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+  <li>
+    Fault Tolerance with Gutter servers
+    <ul>
+      <li>Idle unless main memcached server is dead</li>
+      <li>
+        Client on memcached failure due to being unable to contact a server,
+        contacts gutter server
+      </li>
+      <li>
+        Key doesn't exist in gutter server means client reads from DB and then
+        installs in gutter servers
+      </li>
+      <li>
+        Keys are not explicitly deleted because otherwise excessive number of
+        delete requests to it as gutter can store any key and might not be
+        partitioned. Instead entries expire quickly
+      </li>
+    </ul>
+  </li>
+</ul>
+
+<p id="lecture_15" class="lecture_heading">Lecture 15: Big Data: Spark</p>
+<ul class="note_bullets">
+  <li>
+    Paper:
+    <a href="https://pdos.csail.mit.edu/6.824/papers/zaharia-spark.pdf"
+      >Spark (2012)</a
+    >; <a href="https://www.youtube.com/watch?v=mzIoSW-cInA">Lecture</a>
+  </li>
+  <li>
+    Generalizes two stages of MapReduce into multi-step dataflow graphs. Not
+    great at streaming data
+  </li>
+  <li>
+    Build lazy lineage graph instead of actually computing. Lazy computing
+    <ul>
+      <li>
+        Only executed when running an <i>action</i> (count, collect, reduce,
+        lookup, save)
+      </li>
+      <li>
+        Something like a distinct requires a distributed sort/sending info to
+        right workers or hashing to figure out how to send info to right workers
+      </li>
+      <li>Persist/cache → stores data in memory so don't have to recompute</li>
+    </ul>
+  </li>
+  <li>
+    Data is directly piped in memory to next step, unlike in MapReduce which
+    must create intermediate files. More efficient
+    <ul>
+      <li>
+        For Narrow dependencies (only requires local data), no network
+        interaction at all
+      </li>
+      <li>
+        Last narrow stage will put output to disk and then for the wide stage
+        (dependent on multiple previous stages), it reads the buckets of the
+        file. Similar to MapReduce's reduce step
+      </li>
+      <li>
+        By generating lineage graph can optimize wide operations by avoiding
+        unnecessary operations
+      </li>
+    </ul>
+  </li>
+  <li>
+    Fault Tolerance
+    <ul>
+      <li>
+        Fault tolerance by just rerunning the lineage graph as operations are
+        immutable
+      </li>
+      <li>
+        Works well for narrow dependencies, but wide dependencies require
+        potentially data from all other workers, if not saved to disk might need
+        to rerun all those computations
+      </li>
+      <li>Use snapshotting to avoid having to rerun all computations</li>
+      <li>
+        Very large clusters so need to have a reasonable failure recovery system
+      </li>
+    </ul>
+  </li>
+</ul>
 
 <p id="lecture_14" class="lecture_heading">
   Lecture 14: Optimistic Concurrency Control
