@@ -49,7 +49,7 @@
       <li>Local reads + local writes</li>
       <li>
         Easiest way is to use
-        <i>eventual consistency (See Dynamo and Cassandra)</i>
+        <i>eventual consistency</i> (See Dynamo and Cassandra)
         <ul>
           <li>Reads occur locally</li>
           <li>
@@ -147,6 +147,12 @@
         the put implicitly has all its proceeding operations as a dependency
       </li>
       <li>Performance not notable, 50k ops/second</li>
+      <li>
+        Active area of research (OCCULT for example improves on COPS by not
+        using explicit dependencies and using "causal" timestamps, which is
+        based on real time, that indicate how far advanced a single shard is. If
+        timestamps returned on a read > local, need to retry or query master)
+      </li>
     </ul>
   </li>
   <li>
