@@ -4,6 +4,9 @@
   <p class="toc_title">Contents</p>
   <ul>
     <li>
+      <a href="#lecture_17">Lecture 17: Causal Consistency, COPS</a>
+    </li>
+    <li>
       <a href="#lecture_16"
         >Lecture 16: Cache Consistency: Memcached at Facebook</a
       >
@@ -26,6 +29,148 @@
     <li><a href="#lecture_1">Lecture 1: Introduction</a></li>
   </ul>
 </div>
+
+<p id="lecture_17" class="lecture_heading">
+  Lecture 17: Causal Consistency, COPS
+</p>
+<ul class="note_bullets">
+  <li>
+    Paper:
+    <a href="https://pdos.csail.mit.edu/6.824/papers/cops.pdf">COPS (2011)</a>;
+    <a href="https://www.youtube.com/watch?v=fR_NB714EAI">Lecture</a>
+  </li>
+  <li>
+    Scaling a consistency model while using a consistency model based on
+    causation of events
+  </li>
+  <li>
+    Goals
+    <ul>
+      <li>Local reads + local writes</li>
+      <li>
+        Easiest way is to use
+        <i>eventual consistency (See Dynamo and Cassandra)</i>
+        <ul>
+          <li>Reads occur locally</li>
+          <li>
+            Writes occur locally, but each writer has a write queue of items
+            that they send to replicated servers
+          </li>
+          <li>
+            Other readers on other servers are not guaranteed to see your write.
+            They will eventually, but the order might be different
+          </li>
+          <li>
+            Difficult to use as an app programmer as related updates might
+            return out of order. Ex. Upload Photo → Add to list. The add to list
+            might occur before the photo upload replication happens and thus
+            have be an empty pointer
+          </li>
+        </ul>
+      </li>
+      <li>
+        Eventual Consistency has issues with reconcilling simultaneous writes to
+        the same key
+        <ul>
+          <li>
+            Wall clock to break ties is naive solution (same time ties can be
+            broken with data center id for example), but there can be drift,
+            which results in many writes being rejected incorrectly
+          </li>
+          <li>
+            Lamport (logical) clocks
+            <ul>
+              Every server keeps a value of Tmax, which is the higher number it
+              has seen anywhere else
+              <li>
+                When server assigns a timestamp, it takes max(Tmax + 1, real
+                time)
+              </li>
+            </ul>
+          </li>
+          <li>Last writer wins policy is easy</li>
+          <li>
+            Struggles with atomic increments (transactions/mini-transacations)
+          </li>
+        </ul>
+      </li>
+      <li>
+        Eventual Consistency + Barrier
+        <ul>
+          <li>
+            Implements
+            <i>sync</i>
+            operation, which forces a wait on a key until version is at least a
+            given value
+          </li>
+        </ul>
+      </li>
+      <li>
+        Use a single log server at local datacenter
+        <ul>
+          <li>
+            Orders all local operations and makes sure they arrive at other
+            servers in the right order. Unfortunately, this becomes a potential
+            bottleneck
+          </li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+  <li>
+    COPS + Causal Consistency
+    <ul>
+      <li>
+        Client Context
+        <ul>
+          <li>
+            Keeps track of operations a client does on the client side to
+            understand ordering dependencies. The client keeps track of version
+            numbers obtained by various operations
+          </li>
+          <li>
+            EX (where v indicate version number returned): get(x): v2 → get(y):
+            v4 → put(z, value, {x: v2, y: v4}): v3
+          </li>
+        </ul>
+      </li>
+      <li>
+        Local server gets client operations and forwards data + dependencies to
+        replicas. Replicas must then wait until the dependencies are applied
+        before being able to apply the write. Replicas query other servers in
+        its datacenter to figure out the version numbers of the depenendencies
+        and if they are high enough to apply operation
+      </li>
+      <li>
+        Any put allows for for subsequent operations to use only the put as its
+        context instead of all proceeding operations. This is correct because
+        the put implicitly has all its proceeding operations as a dependency
+      </li>
+      <li>Performance not notable, 50k ops/second</li>
+    </ul>
+  </li>
+  <li>
+    COPS with Get Transactions
+    <ul>
+      <li>
+        Response to Get Transaction gives the version as well as all the
+        dependencies of each value
+      </li>
+      <li>
+        For each item returned, check its dependencies and make sure that the
+        item returned from the Get Transacation has at least the version in the
+        dependency
+      </li>
+      <li>
+        If it doesn't, send a second round of gets. This doesn't introduce
+        additional waiting for dependencies as the initial Get Transaction
+        having a certain value implies that all its dependencies are already
+        updated to the required version. Two rounds of gets to make sure all
+        dependencies are the correct version
+      </li>
+    </ul>
+  </li>
+</ul>
 
 <p id="lecture_16" class="lecture_heading">
   Lecture 16: Cache Consistency: Memcached at Facebook
@@ -53,7 +198,7 @@
         deleting from memcached (harder to get right)
       </li>
       <li>
-        Beccause all writes go through the primary region, a write stemming from
+        Because all writes go through the primary region, a write stemming from
         the secondary region might not get propagated to the secondary region's
         database before the cache is invalidated. Solved by adding a key as
         "remote" which tells future clients to look at the primary region when
