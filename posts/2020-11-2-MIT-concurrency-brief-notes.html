@@ -4,6 +4,11 @@
   <p class="toc_title">Contents</p>
   <ul>
     <li>
+      <a href="#lecture_18"
+        >Lecture 18: Fork Consistency, Certificate Transparency</a
+      >
+    </li>
+    <li>
       <a href="#lecture_17">Lecture 17: Causal Consistency, COPS</a>
     </li>
     <li>
@@ -29,6 +34,101 @@
     <li><a href="#lecture_1">Lecture 1: Introduction</a></li>
   </ul>
 </div>
+
+<p id="lecture_18" class="lecture_heading">
+  Lecture 18: Fork Consistency, Certificate Transparency
+</p>
+<ul class="note_bullets">
+  <li>
+    Paper:
+    <a href="https://research.swtch.com/tlog">Certificate Transparency</a>;
+    <a href="https://www.youtube.com/watch?v=UKdLJ7-0iFM">Lecture</a>
+  </li>
+  <li>
+    System to trust an append only log that is potentially run by a bad agent
+  </li>
+  <li>
+    The original idea about SSL/TLS was to have certificate authorities be able
+    to check that everyone who claims to own a domain/DNS actually does.
+    However, now there are too many websites and there are too many certificate
+    authorities
+    <ul>
+      <li>
+        As a result, sometimes the certificate authorities make a mistake or go
+        rogue and issue bad certs that allow for man in the middle attacks
+      </li>
+      <li>Very difficult to detect what certs are good and what are fake</li>
+    </ul>
+  </li>
+  <li>
+    Certificate Transparency
+    <ul>
+      <li>
+        Allow auditing of validity of certificates by revealing all information
+        publicly
+      </li>
+      <li>
+        Certificate authorities make certs for servers and also sends a copy to
+        the certificate transparency log server
+      </li>
+      <li>
+        Client browsers validate certificates are in the certificate
+        transparency log servers
+      </li>
+      <li>
+        No browser will use certs a log not in the log (could stil be bad certs
+        issued by certificate authorities)
+      </li>
+      <li>
+        Each website builds a "monitor" service to check for any rogue
+        certificates
+      </li>
+      <li>
+        Append only (to prevent deletion by rogue users), no forks (no
+        equivocation aka don't show two different logs to two different users),
+        and ability to handle when untrusted
+      </li>
+    </ul>
+  </li>
+  <li>
+    Merkle tree
+    <ul>
+      <li>
+        Pairs of numbers are hashed in a tree structure. Tree heads are signed
+        so that log servers cannot disavow them later
+      </li>
+      <li>
+        Browsers on getting a cert ask log servers for a proof of inclusion
+        <ul>
+          <li>Asks for the signed tree head</li>
+          <li>
+            Then asks for the position of the given certificate + hashes of the
+            sibling nodes to the parent. Computes the hashs locally and compares
+            vs signed tree head. Computationally infeasible to produce a fake
+            hash
+          </li>
+          <li>Only has log(n) sibling hashes. Makes this fast</li>
+        </ul>
+      </li>
+      <li>
+        Once forked, must maintain the fork indefinitely. Can be defeated by
+        gossip between various clients
+        <ul>
+          <li>Figure out of one log is a prefix of another</li>
+          <li>
+            Given two signed tree heads, ask proof from log server that one is a
+            prefix of another. Log server sends sibings of the nodes to the more
+            recent tree head and then client can compute the hashes locally to
+            compare
+          </li>
+          <li>
+            Browser challenges log servers with previous signed tree heads
+          </li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+</ul>
 
 <p id="lecture_17" class="lecture_heading">
   Lecture 17: Causal Consistency, COPS
