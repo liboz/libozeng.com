@@ -4,6 +4,9 @@
   <p class="toc_title">Contents</p>
   <ul>
     <li>
+      <a href="#lecture_19">Lecture 19: Peer-to-peer: Bitcoin</a>
+    </li>
+    <li>
       <a href="#lecture_18"
         >Lecture 18: Fork Consistency, Certificate Transparency</a
       >
@@ -34,6 +37,72 @@
     <li><a href="#lecture_1">Lecture 1: Introduction</a></li>
   </ul>
 </div>
+
+<p id="lecture_19" class="lecture_heading">Lecture 19: Peer-to-peer: Bitcoin</p>
+<ul class="note_bullets">
+  <li>
+    Paper:
+    <a href="https://pdos.csail.mit.edu/6.824/papers/bitcoin.pdf"
+      >Bitcoin (2008)</a
+    >;
+    <a href="https://www.youtube.com/watch?v=K_euhRou98Y">Lecture</a>
+  </li>
+  <li>Peer to peer system to establish trust by making a chain of hashes</li>
+  <li>
+    <ul>
+      <li>
+        Simplest solution is to have a single trusted entity. But not great
+        because no one entity is trusted by everyone globally
+      </li>
+      <li>
+        Alternatively, use votes by peers. Has issues where someone can make
+        many fake peers and vote for themselves
+      </li>
+    </ul>
+  </li>
+  <li>
+    Bitcoin
+    <ul>
+      <li>
+        Prove work by generating hashes with a given number of zeros. Miners
+        rewarded with bitcoin
+      </li>
+      <li>
+        If most of the cpu power is controlled by non-malicious actor, should
+        generally create the next block first
+      </li>
+      <li>
+        Handles forks (two successors to a single block) when they arise by
+        having all miners switch to longer forks as soon as they learn of it
+      </li>
+      <li>
+        Its possible in short forks for payments to be overwritten. The solution
+        is to wait for many blocks to appear after the transacation you are
+        interested in
+      </li>
+      <li>
+        Determining the difficulty of the hardness is done deterministically
+        based on the timestamps of the blockchain. Forces agreement as everyone
+        sees the same chain
+      </li>
+    </ul>
+  </li>
+  <li>
+    Limitations:
+    <ul>
+      <li>
+        Blocks are limited in size, which highly limits the transactions per
+        second
+      </li>
+      <li>
+        Interblock interval hard to make shorter as making it significantly
+        shorter makes it harder for miners to learn of updated peers and thus
+        they would be wasting much of their compute time
+      </li>
+      <li>Compute time is costly</li>
+    </ul>
+  </li>
+</ul>
 
 <p id="lecture_18" class="lecture_heading">
   Lecture 18: Fork Consistency, Certificate Transparency
