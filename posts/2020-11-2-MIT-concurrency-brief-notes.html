@@ -4,6 +4,9 @@
   <p class="toc_title">Contents</p>
   <ul>
     <li>
+      <a href="#lecture_20">Lecture 20: Blockstack</a>
+    </li>
+    <li>
       <a href="#lecture_19">Lecture 19: Peer-to-peer: Bitcoin</a>
     </li>
     <li>
@@ -37,6 +40,71 @@
     <li><a href="#lecture_1">Lecture 1: Introduction</a></li>
   </ul>
 </div>
+
+<p id="lecture_20" class="lecture_heading">Lecture 20: Blockstack</p>
+<ul class="note_bullets">
+  <li>
+    Paper:
+    <a href="https://pdos.csail.mit.edu/6.824/papers/blockstack-2017.pdf"
+      >BlockStack (2017)</a
+    >;
+    <a href="https://www.youtube.com/watch?v=XvXK_vZ0BNw">Lecture</a>
+  </li>
+  <li>Using blockchain as the basis for a new paradigm of internet services</li>
+  <li>
+    Current web has the applications control all user data instead of the users
+    controlling their own data
+    <ul>
+      <li>
+        Decentralized architecture would have app on user computers. App would
+        be able to somehow figure out how to get the data (potentially from some
+        sort of cloud storage). Permissions/privacy are hard
+      </li>
+      <li>
+        Some data is not owned by a user and some data should not be visible to
+        all users. Makes application programming difficult. (ex. Ebay with
+        hidden bidding. Reddit with vote counts)
+      </li>
+    </ul>
+  </li>
+  <li>
+    Blockstack
+    <ul>
+      <li>Naming (human readable): name → data location, name → public key</li>
+      <li>
+        Public Key Infrastructure (Human readable, globally unique,
+        decentralized allocation)
+      </li>
+      <li>
+        Naming things via bitcoin blockchain on a first come first server basis
+        (means that the names have no real meaning behind them)
+      </li>
+      <li>
+        Atlas system: Converts hashed info in the bitcoin blockchain to a data
+        location (Gaia servers)
+      </li>
+      <li>Every name registration must burn money to run it</li>
+    </ul>
+  </li>
+  <li>
+    Limitations
+    <ul>
+      <li>
+        Forced to use a system like bitcoin to generate a serializable log as
+        certificate transparency for example has issues with preventing multiple
+        registrations for the same naming
+      </li>
+      <li>
+        Blockstack not very convenient for programmers. Hard to program an app
+        as no app only data, hard to do permissions
+      </li>
+      <li>
+        For users, no major apparent advantage. Have to trust storage servers
+        anyways
+      </li>
+    </ul>
+  </li>
+</ul>
 
 <p id="lecture_19" class="lecture_heading">Lecture 19: Peer-to-peer: Bitcoin</p>
 <ul class="note_bullets">
