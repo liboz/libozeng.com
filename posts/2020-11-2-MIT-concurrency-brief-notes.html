@@ -357,8 +357,9 @@
             numbers obtained by various operations
           </li>
           <li>
-            EX (where v indicate version number returned): get(x): v2 → get(y):
-            v4 → put(z, value, {x: v2, y: v4}): v3
+            Ex (v indicate version number returned, → indicates dependency
+            tree): Get X returns v2 → Get Y returns v4 → Put Z with value which
+            depends on {x: v2, y: v4} returns v3
           </li>
         </ul>
       </li>
@@ -370,7 +371,7 @@
         and if they are high enough to apply operation
       </li>
       <li>
-        Any put allows for for subsequent operations to use only the put as its
+        Any put allows for subsequent operations to use only the put as its
         context instead of all proceeding operations. This is correct because
         the put implicitly has all its proceeding operations as a dependency
       </li>
@@ -379,7 +380,8 @@
         Active area of research (OCCULT for example improves on COPS by not
         using explicit dependencies and using "causal" timestamps, which is
         based on real time, that indicate how far advanced a single shard is. If
-        timestamps returned on a read > local, need to retry or query master)
+        timestamps returned from the server on a read > local time, need to
+        retry or query master)
       </li>
     </ul>
   </li>
@@ -387,8 +389,8 @@
     COPS with Get Transactions
     <ul>
       <li>
-        Response to Get Transaction gives the version as well as all the
-        dependencies of each value
+        Response to Get Transaction gives the version (same as before) as well
+        as the dependencies of each value
       </li>
       <li>
         For each item returned, check its dependencies and make sure that the
@@ -446,7 +448,7 @@
       <li>
         Partition
         <ul>
-          <li>Keep one copy of each key means its RAM efficient</li>
+          <li>Keep one copy of each key means it's RAM efficient</li>
           <li>Not good for hot, very frequently accessed keys</li>
           <li>Clients talk to every partition</li>
         </ul>
@@ -469,7 +471,7 @@
           </li>
           <li>
             Prevent inconsistency with database updates by adding a non-zero
-            "hold" time to add operations after a delete
+            "hold" time for operations shortly after a delete
           </li>
         </ul>
       </li>
@@ -479,9 +481,9 @@
           <li>First client to get a miss will get a lease # from memcached</li>
           <li>
             Other front ends getting a miss will be told to wait because
-            memcached has a lease #
+            memcached has a lease #. The lease number will eventually time out,
+            making it possible to make progress eventually
           </li>
-          <li>Is a lease bcause eventually it will time out</li>
           <li>
             Makes it so that only a single client actually queries the database
           </li>
