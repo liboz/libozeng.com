@@ -283,9 +283,8 @@
     causation of events
   </li>
   <li>
-    Goals
+    Goal: Local reads + local writes
     <ul>
-      <li>Local reads + local writes</li>
       <li>
         Easiest way is to use
         <i>eventual consistency</i> (See Dynamo and Cassandra)
@@ -340,14 +339,9 @@
         given value
       </li>
       <li>
-        Use a single log server at local datacenter
-        <ul>
-          <li>
-            Orders all local operations and makes sure they arrive at other
-            servers in the right order. Unfortunately, this becomes a potential
-            bottleneck
-          </li>
-        </ul>
+        Use a single log server at local datacenter: Orders all local operations
+        and makes sure they arrive at other servers in the right order.
+        Unfortunately, this becomes a potential bottleneck
       </li>
     </ul>
   </li>
