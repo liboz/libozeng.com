@@ -76,14 +76,14 @@
         decentralized allocation)
       </li>
       <li>
-        Naming things via bitcoin blockchain on a first come first server basis
+        Naming things via bitcoin blockchain on a first come first serve basis
         (means that the names have no real meaning behind them)
       </li>
       <li>
         Atlas system: Converts hashed info in the bitcoin blockchain to a data
-        location (Gaia servers)
+        location, which are Gaia servers
       </li>
-      <li>Every name registration must burn money to run it</li>
+      <li>Every name registration must burn money to execute it</li>
     </ul>
   </li>
   <li>
@@ -117,6 +117,7 @@
   </li>
   <li>Peer to peer system to establish trust by making a chain of hashes</li>
   <li>
+    Peer to peer systems
     <ul>
       <li>
         Simplest solution is to have a single trusted entity. But not great
@@ -132,21 +133,21 @@
     Bitcoin
     <ul>
       <li>
-        Prove work by generating hashes with a given number of zeros. Miners
-        rewarded with bitcoin
+        Prove work by generating hashes with a given number of zeros. People who
+        do that are called miners and they are rewarded with bitcoin
       </li>
       <li>
-        If most of the cpu power is controlled by non-malicious actor, should
-        generally create the next block first
+        If most of the cpu power is controlled by non-malicious actors, the
+        non-malicious group should generally create the next block first
       </li>
       <li>
         Handles forks (two successors to a single block) when they arise by
         having all miners switch to longer forks as soon as they learn of it
       </li>
       <li>
-        Its possible in short forks for payments to be overwritten. The solution
-        is to wait for many blocks to appear after the transacation you are
-        interested in
+        It's possible in short forks for payments to be overwritten. The
+        solution is to wait for many blocks to appear after the transacation you
+        are interested in
       </li>
       <li>
         Determining the difficulty of the hardness is done deterministically
@@ -165,7 +166,8 @@
       <li>
         Interblock interval hard to make shorter as making it significantly
         shorter makes it harder for miners to learn of updated peers and thus
-        they would be wasting much of their compute time
+        they would be wasting much of their compute time. Miners don't want to
+        waste compute time
       </li>
       <li>Compute time is costly</li>
     </ul>
@@ -209,11 +211,11 @@
         the certificate transparency log server
       </li>
       <li>
-        Client browsers validate certificates are in the certificate
+        Client browsers validate that certificates are in the certificate
         transparency log servers
       </li>
       <li>
-        No browser will use certs a log not in the log (could stil be bad certs
+        No browser will use certs not in the log (could still be bad certs
         issued by certificate authorities)
       </li>
       <li>
@@ -244,7 +246,7 @@
             vs signed tree head. Computationally infeasible to produce a fake
             hash
           </li>
-          <li>Only has log(n) sibling hashes. Makes this fast</li>
+          <li>Only has <i>log(n)</i> sibling hashes. Makes this fast</li>
         </ul>
       </li>
       <li>
@@ -332,15 +334,10 @@
         </ul>
       </li>
       <li>
-        Eventual Consistency + Barrier
-        <ul>
-          <li>
-            Implements
-            <i>sync</i>
-            operation, which forces a wait on a key until version is at least a
-            given value
-          </li>
-        </ul>
+        Eventual Consistency + Barrier: Implements
+        <i>sync</i>
+        operation, which forces a wait on a key until version is at least a
+        given value
       </li>
       <li>
         Use a single log server at local datacenter
