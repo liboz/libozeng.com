@@ -180,6 +180,8 @@ bumping up the using 2vCPUs + 512MiB. Here are my results:
   <li>
     Cloud Run is pretty impressive and the free tier is super generous. I didn't
     heavily measure cold starts as that's more difficult to set up, but on some
-    basic tests golang was much better than dotnet (300ms vs 3.5s).
+    basic tests golang was much better than dotnet (300ms vs 3.5s). I expected
+    there to be a noticeable difference due to having to boot up the CLR, but
+    that's bigger than I expected.
   </li>
 </ul>
