@@ -1,0 +1,185 @@
+<blurb>Benchmarking dotnet and golang</blurb>
+
+<p>
+  I've been making a fun app for personal enjoyment recently. I started with
+  Python because it's easy to experiment with and it has a very nice and
+  convenient standard library.
+</p>
+
+<p>
+  However, unless you are using numpy or some other C based package, Python's
+  performance for cpu based workloads tends to be not so great. The algorithm I
+  cooked up for my app is cpu intensive and took ~5 seconds to run in python on
+  my local desktop. That's suboptimal for something I want to do on demand from
+  an API on the cloud, where the computing resources are going to much more
+  limited. I decided to try my hand at rewriting my python algorithm in C#
+  (dotnet core) and Golang.
+</p>
+
+<p>
+  I've done a lot of programming in C# in the past, but haven't used it
+  recently. I'm not very familiar with dotnet core, but recent performance
+  numbers I've seen seem very promising. As for Golang, I've used it a bit
+  recently so I have a little bit of familiarity, but definitely not in depth
+  knowledge. I decided to use the Echo framework as that seemed to relatively
+  speedy and simple enough to work with. I did some googling around for other
+  frameworks, but I didn't encounter any major issues in Echo that made me want
+  to try another framework. I've seen a large number of comments suggesting to
+  not use a framework at all in Golang, but reimplementing a number of simple
+  things like routing, automatic JSON handling, middleware, etc does not seem to
+  be very valuable to me.
+</p>
+<p>
+  For the sake of this post, I made a microbenchmark with similar
+  characteristics to my actual algorithm. It involves involves reading a JSON
+  request, looping on the data a number of times and using random numbers to
+  make some decisions about the data before spitting out a JSON response.
+  <a href="https://github.com/liboz/AppMicrobenchmark">Here's</a> the repo with
+  the benchmark code. Some random things I learned/relearned while doing these
+  benchmarks include:
+</p>
+<ul>
+  <li>
+    <i>System.Random</i> isn't threadsafe so we need to make a separate instance
+    per thread
+  </li>
+  <li>
+    Golang's <i>math/rand</i> is threadsafe, but contention among multiple
+    threads results in bad performance. I noticed this thanks to easily being
+    able to use <i>pprof</i> while running my algorithm in parallel.
+    <ul>
+      <li>
+        Helpful stuff about pprof:
+        <a href="https://jvns.ca/blog/2017/09/24/profiling-go-with-pprof/"
+          >https://jvns.ca/blog/2017/09/24/profiling-go-with-pprof/</a
+        >,
+        <a href="https://github.com/labstack/echo/issues/251"
+          >Using pprof with echo</a
+        >
+      </li>
+      <li>
+        Thanks for
+        <a
+          href="https://blog.sgmansfield.com/2016/01/the-hidden-dangers-of-default-rand/"
+          >this blog</a
+        >
+        for the explanation on rand
+      </li>
+    </ul>
+  </li>
+  <li>
+    Echo's built in info about how long each request took was very nice. I wish
+    ASP.NET had that built in
+  </li>
+  <li>
+    Golang's docker images are truly miniscule at 4MB. My very small dotnet
+    image is also not too shabby at 21MB. For comparison, some docker images at
+    work with nodejs were breaking 2GB.
+    <ul>
+      <li>
+        Minimizing dotnet images
+        <a
+          href="https://medium.com/01001101/containerize-your-net-core-app-the-right-way-35c267224a8d"
+          >guide</a
+        >.
+        <a
+          href="https://itnext.io/smaller-docker-images-for-asp-net-core-apps-bee4a8fd1277"
+          >This</a
+        >
+        was also interesting
+      </li>
+      <li>
+        Minimizing Golang images
+        <a
+          href="https://medium.com/@chemidy/create-the-smallest-and-secured-golang-docker-image-based-on-scratch-4752223b7324"
+          >guide</a
+        >
+      </li>
+    </ul>
+  </li>
+</ul>
+
+<p>
+  My goal is to run a docker image on GCP's Cloud Run. Cloud Run has the nice
+  feature of scaling to zero so it won't cost me anything if there's no usage.
+  But first I wanted to test it locally. My desktop PC is going to have way
+  better specs than the VMs I would get on a cloud provider, but it's a good
+  point of reference. I used Apachebench and ran following command 3 times:
+</p>
+
+<div
+  style="
+    background-color: gray;
+    font-family: Menlo, Monaco, 'Courier New', monospace;
+    padding: 10px;
+  "
+>
+  ab -p benchmark.txt -T 'application/json' -n 5000 -c 100
+  http://localhost:8080/benchmark
+</div>
+
+<p>Results:</p>
+<img src="assets/microbench-local.png" />
+
+<p>
+  It looks like Golang loses to dotnet by a little bit (12%) on average for
+  request/second. It also doesn't do great in general until we get to the
+  extremely high latency moments (maybe this is due to some GC in dotnet)
+</p>
+
+Of course, I want to see the performance on the cloud too. So I booted up a
+cloud run service with the default settings (256MiB, 1vCPU, 80
+request/container). I also tried bumping up the vCPU count to 2 as well as
+bumping up the using 2vCPUs + 512MiB. Here are my results:
+<div style="display: flex; overflow: scroll">
+  <img src="assets/microbench-cloud-base.png" />
+  <img src="assets/microbench-cloud-twocore.png" />
+  <img src="assets/microbench-cloud-twocore-doublemem.png" />
+</div>
+
+<p>
+  Again Golang beats dotnet at the 99%-tile (maybe this is GC or cold start?).
+  Surprisingly, unlike locally, Golang does better across the board especially
+  on the smallest machine type where the average of 511ms is 33% faster than
+  dotnet's 681ms average. Golang's performance advantage decreases as the
+  resources increase to the point where with double mem + double cores they are
+  basically the same on average. Ideally, I want to be able to use the lowest
+  spec machines possible to reduce any costs so superior performance on those
+  minimal machines is quite attractive.
+</p>
+
+<p>
+  That was a nice exercise, but here are some numbers from my actual algorithm
+  running on the base specs available on cloud run.
+</p>
+<img src="assets/microbench-app-cloud.png" />
+
+<p>
+  The same kind of trends continue with the dotnet version being marginally
+  worse on the 50%-tile response times and much worse at 99%-tile response
+  times. Golang was 35% faster on average than dotnet. I didn't measure memory
+  usage on the cloud, but just vaguely looking at Task Manager while my program
+  was executing indicate that Golang was using 20mb or so of memory vs 200mb of
+  memory from dotnet. That's also quite impressive.
+</p>
+
+<p>Conclusions</p>
+<ul>
+  <li>
+    After reading all the news about dotnet's performance gains, I do see that
+    with better machines it seems to match Golang's performance. However, it's
+    definitely not as lightweight as Golang and it's 99%-tile response times in
+    particular are not inspiring
+  </li>
+  <li>
+    Profiling was really easy in Golang and built in. However, even using some
+    commercial profilers in dotnet didn't really give me any clues as to what
+    was the reasons for some slowness. Maybe I didn't set them up properly or
+    perhaps they aren't so great with static methods...
+  </li>
+  <li>
+    Cloud Run is pretty impressive and the free tier is super generous. I didn't
+    heavily measure cold starts as that's more difficult to set up, but on some
+    basic tests golang was much better than dotnet (300ms vs 3.5s).
+  </li>
+</ul>

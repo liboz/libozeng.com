@@ -286,7 +286,7 @@ func Copy(src, dst string) error {
 }
 
 func createFilesAndDirs() {
-	os.MkdirAll("public", 0755)
+	os.MkdirAll("public/assets", 0755)
 }
 
 func addMiscFiles() {
@@ -297,9 +297,18 @@ func addMiscFiles() {
 	}
 }
 
+func addAssets() {
+	assets := getDir("assets")
+
+	for i := 0; i < len(assets); i++ {
+		Copy("assets/"+assets[i].Name(), "public/assets/"+assets[i].Name())
+	}
+}
+
 func main() {
 	createFilesAndDirs()
 	addMiscFiles()
+	addAssets()
 	postNameMap := make(map[string]postMeta)
 	generatePosts(postNameMap)
 	generateIndex(postNameMap)
