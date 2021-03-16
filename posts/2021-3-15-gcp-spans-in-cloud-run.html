@@ -97,3 +97,15 @@ if ok {
   P.S. Make sure to import
   <i>"contrib.go.opencensus.io/exporter/stackdriver/propagation"</i>
 </p>
+
+<p>
+  P.P.S. Looks like this has already helped out. I was creating a new firebase
+  auth client for each request (which would then grab the public keys). I was
+  also creating a new datastore client for each request, which I also don't need
+  to do. Thanks for cloud tracing I was able to pin point these things down and
+  fix it up. Updated trace below:
+</p>
+
+<div>
+  <img src="assets/cloud-run-span-final-optimized.png" />
+</div>
