@@ -110,16 +110,6 @@ func postLayoutStart(title string) string {
 			`
 }
 
-func getFile(f string) []byte {
-	b, err := ioutil.ReadFile(f)
-
-	if err != nil {
-		panic(err)
-	}
-
-	return b
-}
-
 func getDir(dir string) []os.FileInfo {
 	p, err := ioutil.ReadDir(dir)
 
@@ -244,9 +234,21 @@ func generatePosts(postNameMap map[string]postMeta) {
 		b.WriteString(postLayoutStart(metaInfo.title))
 		b.WriteString("<p>" + metaInfo.date + "</p>")
 		b.WriteString("<h2>" + metaInfo.blurb + "</h2>")
+		preEncountered := false
 		for scanner.Scan() {
+			text := scanner.Text()
+			if strings.Contains(text, "<pre>") {
+				preEncountered = true
+			}
+			spacing := "			"
+			if preEncountered {
+				spacing = ""
+			}
 			b.WriteString("\n")
-			b.WriteString("			" + scanner.Text())
+			b.WriteString(spacing + scanner.Text())
+			if strings.Contains(text, "</pre>") {
+				preEncountered = false
+			}
 		}
 		b.WriteString("<hr></hr>")
 		b.WriteString(`
