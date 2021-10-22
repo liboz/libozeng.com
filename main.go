@@ -253,7 +253,7 @@ func generatePosts(postNameMap map[string]postMeta) {
 		b.WriteString("<hr></hr>")
 		b.WriteString(`
 			<p>
-				Any errata or comments can be made by <a href="https://github.com/liboz/libozeng.com/pulls">sending me a pull request</a>.
+				Any error corrections or comments can be made by <a href="https://github.com/liboz/libozeng.com/pulls">sending me a pull request</a>.
 			</p>
 		`)
 		b.WriteString("<p><a href=\"index.html\">Back</a></p>")
