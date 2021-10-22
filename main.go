@@ -131,12 +131,12 @@ func writeFile(fileName string, b bytes.Buffer) {
 func writeIntro(b *bytes.Buffer) {
 	b.WriteString(`
 			<p>
-			I'm Libo Zeng and this is my personal web site. Random translations I made to try to improve my language abilities and miscellaneous tech related stuff might get posted here.
+			I'm Libo Zeng and this is my personal web site. I might post random translations as well as miscellaneous tech related stuff. Opinions here are my own.
 			</p>
 	`)
 	b.WriteString(`
 			<p>
-			私はリーボと言います。これは私の個人サイトです。言語能力を向上するための雑な翻訳やテクノロジーに関する物を投稿するつもりです。
+			私はリーボと言います。これは私の個人サイトです。雑な翻訳やテクノロジーに関する物を投稿するつもりです。あくまで個人的な意見です。
 			</p>
 	`)
 }
