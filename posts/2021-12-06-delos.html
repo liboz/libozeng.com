@@ -1,0 +1,234 @@
+<blurb>Facebook's Delos</blurb>
+
+<ul class="note_bullets">
+  <li>
+    Papers:
+    <a href="https://www.usenix.org/system/files/osdi20-balakrishnan.pdf"
+      >Virtual Consensus in Delos (2020)</a
+    >,
+    <a href="https://maheshba.bitbucket.io/papers/delos-sosp2021.pdf"
+      >Log-structured Protocols in Delos (2021)</a
+    >
+  </li>
+</ul>
+<hr />
+Virtual Consensus in Delos (2020)
+<ul class="note_bullets">
+  <li>
+    TL; DR: Split up the reconfiguration part and the state machine replication
+    aspect of a consensus protocol to enable on the fly switching/testing of
+    various consensus protocols as well as loosening the availability
+    requirements of the state machine replication aspect.
+  </li>
+  <li>
+    Consensus protocols include a <i>data plane</i> (for ordering and storing
+    commands durably) and a <i>control plane</i> (for reconfiguring leadership,
+    roles, parameters, and membership). Most protocols combine both planes into
+    a single protocol
+  </li>
+  <li>
+    Delos exposes a VirtualLog which acts as a single log to external users, but
+    is in fact composed of a chain of log instances (Loglets). Ex. Entries 1-100
+    belong to Log A, Entries 101-200 to Log B, Entries 201-∞ belong to Log C
+  </li>
+  <li>
+    Requirements
+    <ul>
+      <li>Low # of dependencies on other services</li>
+      <li>Strong guarantees for durability, availability, and consistency</li>
+      <li>
+        Flexible storage APIs (the project needed to create a Table API with
+        transactions, range queries and serialization instead of the filesystem
+        based Zookeeper API)
+      </li>
+      Other goals:
+      <li>Eventually deprecate Zookeeper</li>
+      <li>Migrate between log implementation with no downtime</li>
+    </ul>
+  </li>
+  <li>
+    Virtual Log Abstraction:
+    <ul>
+      <li>
+        <i>append</i> and <i>checkTail</i> are only operated on the most recent
+        log
+      </li>
+      <li><i>readNext</i> could apply to multiple logs</li>
+      <li><i>reconfigExtend</i> is used to change logs to a new log</li>
+      Requirements
+    </ul>
+    <ul></ul>
+  </li>
+  <li>
+    Virtual Log Operations
+    <ul>
+      Steady State
+      <li>
+        Uses locally cache version of the log to write to and forward client
+        operations to there
+      </li>
+      Reconfiguration
+    </ul>
+    <ol>
+      <li>
+        <i>seal</i> the current log (C<sub>i</sub>): This prevents new appends
+        from succeeding on the current log.
+        <i>seal</i>
+        is an idempotent operation so concurrent operations are okay. After
+        <i>seal</i>ing, the client calls
+        <i>checkTail</i>
+        to get the final log position
+      </li>
+      <li>
+        Update the metastore with the new configuration: Write the start
+        position of C<sub>i+1</sub>. The metastore allows conditional writes
+        (C<sub>i+1</sub> if previous was C<sub>i</sub>) so only one concurrent
+        operation will succeed.
+      </li>
+      <li>
+        Fetch updated chain from metastore: Get new configurations and store in
+        local cache
+      </li>
+    </ol>
+    <ul>
+      <li>
+        After a log is <i>seal</i>ed, it returns an error indicating the
+        <i>seal</i>ed state to the client. <i>checkTail</i> also returns a bit
+        about sealed. When this happens, the client knows to fetch new configs
+        from the metastore
+      </li>
+      <li>
+        If after getting a sealed response from the log and fetching from the
+        metastore returns no new configuration, wait before fetching again.
+        After an appropriate timeout, start creating a separate chain.
+      </li>
+    </ul>
+  </li>
+  <li>
+    Virtual Log Metastore: Uses raft, paxos, or similar things to ensure highly
+    available consistent operations. Is not on the critical path as
+    reconfigurations are rare
+  </li>
+  <li>
+    Loglet
+    <ul>
+      <li>
+        Requirements
+        <ul>
+          <li>Totally ordered durable storage</li>
+          <li>
+            Highly available <i>seal</i> operation (does not need fault tolerant
+            consensus). Does not need highly available <i>append</i> operation
+          </li>
+        </ul>
+      </li>
+      <li>
+        "Zombie" appends can happen where the <i>checkTail</i> operation returns
+        increasing tail positions despite it being sealed. This is not relevant
+        because the final positions are stored durably in the virtual log
+      </li>
+      <li>
+        Native Loglet (performance optimized loglet)
+        <ul>
+          <li>
+            Single sequencer assigns position for every command and remaining
+            machines replicate it for durability. The sequencer is a single
+            point of failure, but if it fails, the system will be reconfigured.
+            A command is considered committed if a majority of servers have
+            replicated it.
+          </li>
+          <li>
+            <i>seal</i> occurs by contacting each Native Loglet server and
+            setting the seal bit to true. A system is sealed if a majority of
+            servers are sealed
+          </li>
+          <li>
+            <i>checkTail</i> uses a state machine so that if some servers return
+            as sealed, eventually the entire system is sealed, in which case it
+            returns the max value of the tail returned
+          </li>
+          <li>Fast local reads</li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+  <li>
+    Experimental info:
+    <ul>
+      <li>
+        Successful production swap between initial Zookeper based Loglet to
+        native loglet. 10x performance gains
+      </li>
+      <li>
+        Can modify throughout characteristics by swapping between having the
+        loglet on the same server as the virtual log and not. Default has the
+        loglet and the virtual log on the same server. With high QPS, being on
+        the same server results in IO contention and by offloading the loglet to
+        separate servers, the throughput is greatly improved. Can use in real
+        time to handle workload changes.
+      </li>
+      <li>
+        Can eliminate the sequencer bottleneck by using a round robin between
+        multiple loglets at once (StripedLoglet)
+      </li>
+    </ul>
+  </li>
+</ul>
+<hr />
+Log-structured Protocols in Delos (2021)
+<ul class="note_bullets">
+  <li>
+    TL; DR: Create reusable protocol stacks so that developing different
+    applications using a shared log is easy
+  </li>
+  <li>
+    Initially had a single Table API (DelosTable). Incrementally upgraded with
+    no downtime to enable backups and other features. When building Zookeeper
+    API (Zelos), they were able to reuse the production ready stack from
+    DelosTable. Zookeeper API had special requirements such as stronger
+    consistency than linearizability (same session operations are ordered which
+    is a fact used by transactions). Use common performance upgrades
+    Batching/Leasing
+  </li>
+  <li>
+    Stack of engines. It's linearizable because it simply applies the log
+    operations sent to it from a lower engine. Each one inspects its own headers
+    for additional metadata to do operations like batching or adding leases etc.
+    <ul>
+      <li>
+        Top layer uses <i>propose</i> and each layer uses <i>propose</i> to
+        propagate all the way down to the BaseEngine. Then each layer calls
+        <i>apply</i> on its local store before forwarding the log entry higher
+        up in the stack
+      </li>
+    </ul>
+  </li>
+  <li>
+    Dynamic Addition of Engines: Two phase protocol where initially it is added
+    but can only append to shared log and not update local state. After that
+    with a log command it is enabled consistently across all servers.
+  </li>
+  <li>
+    SessionOrderEngine: Handle Zookeeper's ordering guarantees where same
+    session operations are ordered even without waiting. Solves this by
+    generating a sequence number and only allowing entries upstream in sequence
+    order. Out of order entries are filtered and re-proposed
+  </li>
+  <li>
+    Allow easy design of other operations such as building Queues and Locking
+    over Delos. These services are generally production ready and don't require
+    high amounts of customer load on operators
+  </li>
+  <li>
+    Major benefit is that each layer can add an ObserverEngine to monitor the
+    time cost of that engine in a transparent way.
+  </li>
+</ul>
+
+<style>
+  .note_bullets li,
+  .note_bullets ul,
+  .note_bullets {
+    margin-bottom: 0;
+  }
+</style>
