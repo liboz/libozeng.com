@@ -1,0 +1,801 @@
+<blurb>Consistent Hashing Demo</blurb>
+
+<p>
+  This time is a little different. Here's a little demo of consistent hashing
+  built with <a href="http://vanilla-js.com/">Vanilla Js</a>.
+</p>
+<div style="display: flex">
+  <select id="page-number" onchange="changePage()">
+    <option value="1">1. Introduction</option>
+    <option value="2">2. Adding a Shard</option>
+    <option value="3">3. Why use virtual nodes</option>
+    <option value="4">4. Free exploration</option>
+  </select>
+  <div>
+    <button id="left-button" onclick="onLeftButton()"><</button>
+    <button id="right-button" onclick="onRightButton()">></button>
+  </div>
+</div>
+<div id="introduction" style="display: none">
+  <p>
+    Consistent Hashing is one technique that is used when sharding elements. One
+    of its benefits is that it reduces the number of elements moved when
+    resharding. An example use case for sharding would be in a database storing
+    a number of users.
+  </p>
+  <p>
+    In the below image, we choose to shard the users by their first name. We do
+    this by running their first name through SHA-256 and then taking the modulus
+    36000 and multiplying by 100 to map it to the unit circle in degrees. Now,
+    imagine we have 3 shards. We can do a similar hashing with the shard number
+    <i>"shard_number:0"</i> and map those to degrees as well. Then, we determine
+    which shard a user belongs to by looking counter clockwise for the closest
+    shard to it. For example, <i>"Hugh"</i> maps to 13.76° and we see that it
+    fits in
+    <span style="background-color: rgb(197, 216, 109); color: #000000"
+      >Shard 0</span
+    >.
+  </p>
+  <p>Go to the next page to see what happens when we add a new shard</p>
+</div>
+<div id="adding-a-shard" style="display: none">
+  <p>Now, we've added a new shard, Shard 3.</p>
+  <p>
+    We see that it covers the angles 130.56°-206.4° and that <i>"Mark"</i> and
+    <i>"Rowan"</i> belongs in that range. So, in adding a new shard, we merely
+    have to move <i>"Mark"</i> and <i>"Rowan"</i> from Shard 2 to Shard 3. This
+    minimizes the number of elements moved.
+  </p>
+  <p>
+    With a naive hashing algorithm, every time the number of shards changes, the
+    majority of elements have to be moved. So, one benefit is that consistent
+    hashing does well with resharding.
+  </p>
+  <p>
+    One downside with this current setup is that the number of elements per
+    shard is imbalanced. Shard 0 contains 4 elements, but Shard 2 only has 1
+    element. Go to the next page for how this can be resolved.
+  </p>
+</div>
+<div id="why-virtual-nodes" style="display: none">
+  <p>
+    On the previous page, we saw that often times the number of elements per
+    shard are not very evenly distributed. In our database example, that could
+    lead to undesirable characteristics such as one shard being overloaded with
+    queries.
+  </p>
+  <p>
+    One way to solve this issue is using so-called <i>"virtual nodes"</i>.
+    Instead of each shard corresponding to a single angle, we can generate a
+    large number of nodes for each shard. For example, if we have 100 virtual
+    nodes, we can SHA-256 has <i>"shard_number:99"</i> to get the location of
+    the 100th virtual node and <i>"shard_number:49"</i> to get the location of
+    the 50th virtual node. Then each shard will be much more evenly spread out
+    throughout the unit circle. This also means that each shard will take up a
+    much more even amount of the unit circle.
+  </p>
+  <p>
+    Now that we have 100 virtual nodes, we have a pretty even distribution of
+    elements per shard and so the likelihood of a hot spot is significantly
+    lower.
+  </p>
+  <p>
+    The next page lets you play with the settings to explore for yourself how
+    consistent sharding works.
+  </p>
+</div>
+<div id="free-control" style="display: none">
+  <div>
+    <p>
+      Feel free to play around with the various parameters. For example, look at
+      the distribution of users when there are 2 shards, 2 virtual nodes, and
+      100 users. It's not very evenly distributed at all! Increasing the number
+      of virtual nodes helps balance the distribution significantly.
+    </p>
+    <p>
+      <i>Warning: large numbers of users make the graphic hard to read.</i>
+    </p>
+  </div>
+
+  <div style="display: flex">
+    <div style="display: flex; flex-direction: column; padding-right: 10px">
+      <label for="shardCount">Choose the number of shards (2-5):</label>
+      <input
+        type="number"
+        id="shardCount"
+        name="shardCount"
+        min="2"
+        max="5"
+        onchange="initialize()"
+      />
+    </div>
+    <div style="display: flex; flex-direction: column">
+      <label for="subShardCount"
+        >Choose the number of virtual nodes per shard (1-100):</label
+      >
+      <input
+        type="number"
+        id="subShardCount"
+        name="subShardCount"
+        min="1"
+        max="100"
+        onchange="initialize()"
+      />
+    </div>
+    <div style="display: flex; flex-direction: column">
+      <label for="userCount">Choose the number of users (10-100):</label>
+      <input
+        type="number"
+        id="userCount"
+        name="userCount"
+        min="10"
+        max="100"
+        onchange="initialize()"
+      />
+    </div>
+  </div>
+</div>
+<div style="display: flex; flex-direction: column; justify-content: start">
+  <b>Shard Info:</b>
+  <div class="shard-legend" style="display: flex"></div>
+</div>
+<div style="display: flex; align-items: center; justify-content: center">
+  <svg class="consistent-hash" width="600" height="600" style="flex: 3">
+    <circle
+      class="consistent-hash__circle"
+      stroke="black"
+      stroke-width="4"
+      fill="transparent"
+      r="250"
+      cx="300"
+      cy="300"
+    />
+    <path d="M 515,300 L 585,300" stroke="blue" stroke-width="4" />
+    <text x="515" y="290" style="font-size: 20px">0°</text>
+    >
+  </svg>
+  <div
+    class="name-legend"
+    style="
+      flex: 1;
+      display: flex;
+      flex-wrap: wrap;
+      flex-direction: column;
+      max-height: 600px;
+    "
+  ></div>
+</div>
+<script>
+  let currentStateIndex = 0;
+  // total width 600, height 600
+  // circle goes from 50 -> 550
+
+  // From https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/digest
+  async function hashString(message) {
+    const msgUint8 = new TextEncoder().encode(message); // encode as (utf-8) Uint8Array
+    const hashBuffer = await crypto.subtle.digest("SHA-256", msgUint8); // hash the message
+    const hashArray = Array.from(new Uint8Array(hashBuffer)); // convert buffer to byte array
+    const hashHex = hashArray
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join(""); // convert bytes to hex string
+    const hashNumber = Number("0x" + hashHex);
+    return hashNumber;
+  }
+  // From https://coolors.co/
+  // From https://www.name-generator.org.uk/character/
+  const initialData = {
+    Carrie: "#877666",
+    Hugh: "#7fb7be",
+    Josiah: "#d3f3ee",
+    Maxim: "#dacc3e",
+    Evangeline: "#bc2c1a",
+    Tiana: "#7d1538",
+    Mark: "#464d77",
+    Noah: "#36827f",
+    Rowan: "#f9db6d",
+    Stacey: "#c490d1",
+  };
+  const allNames = [
+    "Isla",
+    "Julia",
+    "Miriam",
+    "Heather",
+    "Mary",
+    "Kitty",
+    "Abbie",
+    "Kayleigh",
+    "Claudia",
+    "Hayley",
+    "Annie",
+    "Lottie",
+    "Anisa",
+    "Yasmine",
+    "Amira",
+    "Elsie",
+    "Anita",
+    "Vanessa",
+    "Rhea",
+    "Sapphire",
+    "Anais",
+    "Leyla",
+    "Rhonda",
+    "Julie",
+    "Sienna",
+    "Caroline",
+    "Hana",
+    "Bella",
+    "Catherine",
+    "Melanie",
+    "Hannah",
+    "Barbara",
+    "Haleema",
+    "Aiden",
+    "Alyssa",
+    "Tanisha",
+    "Sinead",
+    "Zoya",
+    "Roxanne",
+    "Daniella",
+    "Rosie",
+    "Francis",
+    "Anika",
+    "Kelly",
+    "Saffron",
+    "Autumn",
+    "Jemima",
+    "Leonie",
+    "Susan",
+    "Darcie",
+    "Benjamin",
+    "Evangeline",
+    "Dean",
+    "Lloyd",
+    "Yusuf",
+    "Aaron",
+    "Aoife",
+    "Anthony",
+    "Craig",
+    "Mohammed",
+    "Mason",
+    "Erica",
+    "Guy",
+    "Zack",
+    "Herman",
+    "Joshua",
+    "Fletcher",
+    "Jared",
+    "Jesse",
+    "Haroon",
+    "Muhammed",
+    "Robert",
+    "Glenn",
+    "Donald",
+    "Jessie",
+    "Zakaria",
+    "Jason",
+    "Courtney",
+    "Michael",
+    "Ismail",
+    "Anas",
+    "Albert",
+    "Roy",
+    "Tony",
+    "Faith",
+    "Jean",
+    "Kenneth",
+    "Zak",
+    "Sebastian",
+    "Abdul",
+    "Vincent",
+    "Cleo",
+    "Jeffrey",
+    "Callum",
+    "Rocco",
+    "Alan",
+    "Oliver",
+    "Hector",
+    "Hashim",
+    "Adrian",
+  ];
+
+  const data = {};
+
+  const shardColors = {
+    0: "#c5d86d",
+    1: "#e4e6c3",
+    2: "#f05d23",
+    3: "#86ba90",
+    4: "#4b4e6d",
+  };
+  const shards = {};
+  const shardDomElements = [];
+  const userDomElements = [];
+
+  function convertHashToUnitCircle(hash) {
+    return (hash % 36000) / 100;
+  }
+
+  async function generateHashes() {
+    const promises = [];
+    for (const name in data) {
+      const promise = hashString(name);
+      promises.push(promise);
+      promise.then(
+        (hash) =>
+          (data[name] = {
+            color: data[name],
+            degrees: convertHashToUnitCircle(hash),
+          })
+      );
+    }
+    return await Promise.all(promises);
+  }
+
+  function getXPosition(degree, largeRadius, largeCx) {
+    return Math.cos((degree / 180) * Math.PI) * largeRadius + largeCx;
+  }
+
+  function getYPosition(degree, largeRadius, largeCy) {
+    return -Math.sin((degree / 180) * Math.PI) * largeRadius + largeCy;
+  }
+
+  function generateCircularPositions(
+    svgElement,
+    largeRadius,
+    largeCx,
+    largeCy
+  ) {
+    const dataSize = Object.keys(data).length;
+    let r = "20";
+    if (dataSize > 15) {
+      r = "10";
+    }
+    for (const name in data) {
+      var circleElement = document.createElementNS(
+        "http://www.w3.org/2000/svg",
+        "circle"
+      );
+      circleElement.setAttribute("r", r);
+      circleElement.setAttribute(
+        "cx",
+        getXPosition(data[name].degrees, largeRadius, largeCx)
+      );
+      circleElement.setAttribute(
+        "cy",
+        getYPosition(data[name].degrees, largeRadius, largeCy)
+      );
+      circleElement.style.fill = data[name].color;
+      circleElement.style.stroke = "#000000";
+      circleElement.style.strokeWidth = "4px";
+      svgElement.appendChild(circleElement);
+      userDomElements.push(circleElement);
+    }
+  }
+
+  function generateTextPositions(svgElement, largeRadius, largeCx, largeCy) {
+    const fontSize = generateFontSizeBasedOnElementCount(Object.keys(data));
+
+    for (const name in data) {
+      var textElement = document.createElementNS(
+        "http://www.w3.org/2000/svg",
+        "text"
+      );
+      const textNodeElement = document.createTextNode(name);
+      textElement.appendChild(textNodeElement);
+      textElement.setAttribute("font-size", fontSize);
+      textElement.setAttribute("stroke", "#000000");
+
+      textElement.setAttribute("stroke-width", "4px");
+      textElement.setAttribute("fill", "#ffffff");
+      textElement.setAttribute("stroke-linejoin", "round");
+      textElement.style.paintOrder = "stroke";
+
+      textElement.setAttribute(
+        "x",
+        getXPosition(data[name].degrees, largeRadius, largeCx) - 25
+      );
+      textElement.setAttribute(
+        "y",
+        getYPosition(data[name].degrees, largeRadius, largeCy)
+      );
+      svgElement.appendChild(textElement);
+      userDomElements.push(textElement);
+    }
+  }
+
+  function sortedNames() {
+    return Object.keys(data).sort((a, b) => data[a].degrees - data[b].degrees);
+  }
+
+  function generateFontSizeBasedOnElementCount(elements) {
+    let fontSize = "20px";
+    if (elements.length > 15) {
+      fontSize = "10px";
+    }
+    return fontSize;
+  }
+
+  function generateLegend(legendElement) {
+    const sorted = sortedNames();
+    const fontSize = generateFontSizeBasedOnElementCount(sorted);
+    for (const name of sorted) {
+      const legendTextElement = document.createElement("div");
+      legendTextElement.style = `display: flex; align-items: center; font-size: ${fontSize}`;
+      const legendBoxElement = document.createElement("div");
+      legendBoxElement.style = `background-color: ${data[name].color}; width: 10px; height: 10px;`;
+      const legendTextNodeElement = document.createTextNode(
+        `${name}: ${data[name].degrees}°`
+      );
+      legendTextElement.appendChild(legendBoxElement);
+      legendTextElement.appendChild(legendTextNodeElement);
+      legendElement.appendChild(legendTextElement);
+      userDomElements.push(legendTextElement);
+    }
+  }
+
+  async function generateShardPositions(shardCount, subShardCount) {
+    // clear the shards first
+    Object.keys(shards).forEach((key) => delete shards[key]);
+    const shardPromises = [];
+    for (let i = 0; i < shardCount; i++) {
+      shards[i] = {};
+
+      for (let j = 0; j < subShardCount; j++) {
+        shards[i][j] = {};
+        const shardPromise = hashString(`${i}:${j}`);
+        shardPromise.then((hash) => {
+          shards[i][j] = convertHashToUnitCircle(hash);
+        });
+        shardPromises.push(shardPromise);
+      }
+    }
+
+    return Promise.all(shardPromises);
+  }
+
+  function generateShardArcs(
+    sortedShards,
+    svgElement,
+    largeRadius,
+    largeCx,
+    largeCy
+  ) {
+    for (let i = 0; i < sortedShards.length; i++) {
+      const nextIndex = (i + 1) % sortedShards.length;
+      const startAngle = sortedShards[i][2];
+      const endAngle = sortedShards[nextIndex][2];
+
+      const angleDifference =
+        endAngle >= startAngle
+          ? endAngle - startAngle
+          : endAngle + 360 - startAngle;
+      const isLargeArc = angleDifference > 180 ? "1" : "0";
+      // https://developer.mozilla.org/en-US/docs/Web/SVG/Tutorial/Paths#arcs
+      const d = [
+        "M",
+        getXPosition(startAngle, largeRadius, largeCx),
+        getYPosition(startAngle, largeRadius, largeCy),
+        "A",
+        largeRadius,
+        largeRadius,
+        0,
+        isLargeArc,
+        0,
+        getXPosition(endAngle, largeRadius, largeCx),
+        getYPosition(endAngle, largeRadius, largeCy),
+      ].join(" ");
+      const path = document.createElementNS(
+        "http://www.w3.org/2000/svg",
+        "path"
+      );
+
+      path.setAttribute("d", d);
+      path.setAttribute("stroke", shardColors[sortedShards[i][0]]);
+      path.setAttribute("stroke-width", "10px");
+      path.setAttribute("fill", "transparent");
+
+      svgElement.appendChild(path);
+      shardDomElements.push(path);
+    }
+  }
+
+  function generateAngleLegendInfo(angles) {
+    const result = [];
+    let totalDegrees = 0;
+    for (const angle of angles) {
+      const { startAngle, endAngle } = angle;
+      result.push(`${startAngle}°-${endAngle}°`);
+      if (endAngle >= startAngle) {
+        totalDegrees += endAngle - startAngle;
+      } else {
+        totalDegrees += 360 + endAngle - startAngle;
+      }
+    }
+    return { anglesTextString: result.join(", "), totalDegrees };
+  }
+
+  function showDetails(event, shardNumber) {
+    event.preventDefault();
+    const element = document.getElementById(`legend-text-shard-${shardNumber}`);
+
+    if (event.target.textContent === "Show Details") {
+      element.style = `display: block; max-width: ${
+        800 / Object.keys(shards).length
+      }px; font-size: ${generateFontSizeBasedOnElementCount(
+        Object.keys(getAllSubShards())
+      )}`;
+      event.target.textContent = "Hide Details";
+    } else {
+      element.style = "display: none";
+      event.target.textContent = "Show Details";
+    }
+  }
+
+  function generateShardLegend(shardLegendElement, sortedShards) {
+    const mainOuterElement = document.createElement("div");
+    mainOuterElement.style = "display: flex";
+    const shardInfo = {};
+
+    for (let i = 0; i < sortedShards.length; i++) {
+      const nextIndex = (i + 1) % sortedShards.length;
+      const startAngle = sortedShards[i][2];
+      const endAngle = sortedShards[nextIndex][2];
+
+      if (shardInfo[sortedShards[i][0]] === undefined) {
+        shardInfo[sortedShards[i][0]] = { angles: [], includedElements: [] };
+      }
+
+      shardInfo[sortedShards[i][0]].angles.push({ startAngle, endAngle });
+
+      const includedElements = [];
+      for (const name of sortedNames()) {
+        const { color, degrees } = data[name];
+        if (endAngle >= startAngle) {
+          if (degrees > startAngle && degrees <= endAngle) {
+            includedElements.push({ name, color });
+          }
+        } else {
+          if (degrees > startAngle || degrees <= endAngle) {
+            includedElements.push({ name, color });
+          }
+        }
+      }
+
+      shardInfo[sortedShards[i][0]].includedElements.push(...includedElements);
+    }
+
+    const sortedShardInfo = Object.entries(shardInfo).sort(
+      (a, b) => Number(a[0]) - Number(a[b])
+    );
+
+    for (const info of sortedShardInfo) {
+      const subOuterElement = document.createElement("div");
+      subOuterElement.style = "padding: 5px";
+
+      const { angles, includedElements } = info[1];
+      const legendTextElement = document.createElement("div");
+      const legendBoxElement = document.createElement("span");
+      legendBoxElement.style = `background-color: ${
+        shardColors[info[0]]
+      }; width: 10px; height: 10px; display: inline-block;`;
+      const { anglesTextString, totalDegrees } =
+        generateAngleLegendInfo(angles);
+      const legendTextNodeElementContainer = document.createElement("span");
+      const legendTextNodeElement = document.createTextNode(
+        `Angles covered by shard ${info[0]}: ${anglesTextString}`
+      );
+      legendTextNodeElementContainer.id = `legend-text-shard-${info[0]}`;
+      legendTextNodeElementContainer.style = `display: none`;
+      legendTextNodeElementContainer.appendChild(legendTextNodeElement);
+
+      const showMoreLink = document.createElement("a");
+      showMoreLink.style = "padding-left: 5px";
+      showMoreLink.setAttribute("href", "#");
+      showMoreLink.setAttribute("onClick", `showDetails(event, ${info[0]})`);
+      const showMoreTextNode = document.createTextNode("Show Details");
+      showMoreLink.appendChild(showMoreTextNode);
+
+      const totalAnglesTextNodeElement = document.createTextNode(
+        `Shard ${info[0]} covers a total of ${totalDegrees.toFixed(2)}°`
+      );
+
+      legendTextElement.appendChild(legendBoxElement);
+      legendTextElement.appendChild(totalAnglesTextNodeElement);
+      legendTextElement.appendChild(showMoreLink);
+
+      subOuterElement.appendChild(legendTextElement);
+      subOuterElement.appendChild(legendTextNodeElementContainer);
+
+      const containerForIncludedElements = document.createElement("div");
+      containerForIncludedElements.style =
+        "margin-left: 15px; display: flex; flex-wrap: wrap; flex-direction: column; max-height: 200px;";
+      if (includedElements.length > 0) {
+        const fontSize = generateFontSizeBasedOnElementCount(Object.keys(data));
+
+        for (const element of includedElements) {
+          const includedElement = document.createElement("div");
+          includedElement.style = `font-size: ${fontSize}`;
+          const includedElementTextNode = document.createTextNode(element.name);
+          includedElement.appendChild(includedElementTextNode);
+          containerForIncludedElements.appendChild(includedElement);
+        }
+      }
+
+      const countTextNode = document.createTextNode(
+        `Total Elements: ${includedElements.length}`
+      );
+      subOuterElement.appendChild(containerForIncludedElements);
+      subOuterElement.appendChild(countTextNode);
+      mainOuterElement.appendChild(subOuterElement);
+    }
+
+    shardLegendElement.appendChild(mainOuterElement);
+    shardDomElements.push(mainOuterElement);
+  }
+
+  function shuffleNames(count) {
+    const namesCopy = [...allNames].slice(0, count);
+    for (let i = namesCopy.length - 1; i >= 0; i--) {
+      const randomIndex = Math.floor(Math.random() * (i + 1));
+      const temp = namesCopy[i];
+      namesCopy[i] = namesCopy[randomIndex];
+      namesCopy[randomIndex] = temp;
+    }
+    return namesCopy;
+  }
+
+  function getAllSubShards() {
+    return Object.entries(shards).flatMap((shard) => {
+      const subShards = Object.entries(shard[1]);
+      subShards.forEach((ss) => ss.unshift(shard[0]));
+      return subShards;
+    });
+  }
+
+  async function initialize(initialShards, initialSubShards, setInitialData) {
+    if (initialShards === undefined) {
+      initialShards = document.getElementById("shardCount").value;
+    } else {
+      document.getElementById("shardCount").value = initialShards;
+    }
+
+    if (initialSubShards === undefined) {
+      initialSubShards = document.getElementById("subShardCount").value;
+    } else {
+      document.getElementById("subShardCount").value = initialSubShards;
+    }
+
+    let shouldRemove = false;
+    if (setInitialData !== undefined) {
+      Object.keys(data).forEach((key) => delete data[key]);
+      Object.keys(setInitialData).forEach(
+        (key) => (data[key] = setInitialData[key])
+      );
+      document.getElementById("userCount").value =
+        Object.keys(setInitialData).length;
+      shouldRemove = true;
+    } else {
+      const userCount = Number(document.getElementById("userCount").value);
+      if (userCount !== Object.keys(data).length) {
+        shouldRemove = true;
+        Object.keys(data).forEach((key) => delete data[key]);
+        if (userCount === 10) {
+          Object.keys(initialData).forEach(
+            (key) => (data[key] = initialData[key])
+          );
+        } else {
+          const names = shuffleNames(userCount);
+          const colors = Object.values(initialData);
+
+          for (let i = 0; i < names.length; i++) {
+            data[names[i]] = colors[i % colors.length];
+          }
+        }
+      }
+    }
+    initializeRing(shouldRemove);
+
+    const shardPromises = generateShardPositions(
+      initialShards,
+      initialSubShards
+    );
+
+    const svgElement = document.getElementsByTagName("svg")[0];
+    const shardLegendElement =
+      document.getElementsByClassName("shard-legend")[0];
+
+    const initialCircle = document.getElementsByClassName(
+      "consistent-hash__circle"
+    )[0];
+    const largeRadius = Number(initialCircle.getAttribute("r"));
+    const largeCx = Number(initialCircle.getAttribute("cx"));
+    const largeCy = Number(initialCircle.getAttribute("cy"));
+
+    await shardPromises;
+    for (let i = shardDomElements.length - 1; i >= 0; i--) {
+      const element = shardDomElements.pop();
+      element.remove();
+    }
+
+    const sortedShards = getAllSubShards().sort((a, b) => a[2] - b[2]);
+    generateShardArcs(sortedShards, svgElement, largeRadius, largeCx, largeCy);
+    generateShardLegend(shardLegendElement, sortedShards);
+    // call this last to ensure it is on top
+    generateTextPositions(svgElement, largeRadius, largeCx, largeCy);
+  }
+
+  async function initializeRing(shouldRemove) {
+    if (!shouldRemove) {
+      return;
+    }
+    const hashPromises = generateHashes();
+
+    for (let i = userDomElements.length - 1; i >= 0; i--) {
+      const element = userDomElements.pop();
+      element.remove();
+    }
+
+    const svgElement = document.getElementsByTagName("svg")[0];
+    const legendElement = document.getElementsByClassName("name-legend")[0];
+
+    const initialCircle = document.getElementsByClassName(
+      "consistent-hash__circle"
+    )[0];
+    const largeRadius = Number(initialCircle.getAttribute("r"));
+    const largeCx = Number(initialCircle.getAttribute("cx"));
+    const largeCy = Number(initialCircle.getAttribute("cy"));
+
+    await hashPromises;
+    generateCircularPositions(svgElement, largeRadius, largeCx, largeCy);
+    generateLegend(legendElement);
+    generateTextPositions(svgElement, largeRadius, largeCx, largeCy);
+  }
+
+  function hideAllText() {
+    document.getElementById("introduction").style = "display: none;";
+    document.getElementById("adding-a-shard").style = "display: none;";
+    document.getElementById("why-virtual-nodes").style = "display: none;";
+    document.getElementById("free-control").style = "display: none;";
+  }
+
+  function getCurrentPageNumber() {
+    return Number(document.getElementById("page-number").value);
+  }
+
+  function changePage(initialPage) {
+    if (initialPage !== undefined) {
+      document.getElementById("page-number").value = initialPage;
+    }
+    const pageNumber = getCurrentPageNumber();
+    hideAllText();
+    if (pageNumber === 1) {
+      initialize(3, 1, initialData);
+      document.getElementById("introduction").style = "";
+    } else if (pageNumber === 2) {
+      initialize(4, 1, initialData);
+      document.getElementById("adding-a-shard").style = "";
+    } else if (pageNumber === 3) {
+      initialize(4, 100, initialData);
+      document.getElementById("why-virtual-nodes").style = "";
+    } else if (pageNumber === 4) {
+      initialize(4, 100, initialData);
+      document.getElementById("free-control").style = "";
+    }
+  }
+
+  function onLeftButton() {
+    const currentPageNumber = getCurrentPageNumber();
+    if (currentPageNumber > 1) {
+      changePage(currentPageNumber - 1);
+    }
+  }
+
+  function onRightButton() {
+    const currentPageNumber = getCurrentPageNumber();
+    if (currentPageNumber < 4) {
+      changePage(currentPageNumber + 1);
+    }
+  }
+
+  changePage(1);
+</script>
