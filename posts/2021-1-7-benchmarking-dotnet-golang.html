@@ -119,7 +119,7 @@
 </div>
 
 <p>Results:</p>
-<img src="assets/microbench-local.png" />
+<img src="assets/microbench-local.png" loading="lazy" />
 
 <p>
   It looks like Golang loses to dotnet by a little bit (12%) on average for
@@ -132,9 +132,9 @@ cloud run service with the default settings (256MiB, 1vCPU, 80
 request/container). I also tried bumping up the vCPU count to 2 as well as
 bumping up the using 2vCPUs + 512MiB. Here are my results:
 <div style="display: flex; overflow: scroll">
-  <img src="assets/microbench-cloud-base.png" />
-  <img src="assets/microbench-cloud-twocore.png" />
-  <img src="assets/microbench-cloud-twocore-doublemem.png" />
+  <img src="assets/microbench-cloud-base.png" loading="lazy" />
+  <img src="assets/microbench-cloud-twocore.png" loading="lazy" />
+  <img src="assets/microbench-cloud-twocore-doublemem.png" loading="lazy" />
 </div>
 
 <p>
@@ -152,7 +152,7 @@ bumping up the using 2vCPUs + 512MiB. Here are my results:
   That was a nice exercise, but here are some numbers from my actual algorithm
   running on the base specs available on cloud run.
 </p>
-<img src="assets/microbench-app-cloud.png" />
+<img src="assets/microbench-app-cloud.png" loading="lazy" />
 
 <p>
   The same kind of trends continue with the dotnet version being marginally
