@@ -18,3 +18,9 @@ a {
   a:visited {
     color: #e6e6e6; }
 ```
+
+# TODO:
+
+- [ ] Tag system
+- [ ] Project page
+- [ ] Automatic image size generator
