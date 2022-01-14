@@ -1,0 +1,455 @@
+<blurb>Setting up Kubernetes for $18/month</blurb>
+
+<div id="toc_container">
+  <p class="toc_title">Contents</p>
+  <ul>
+    <li>
+      <a href="#intro">Introduction</a>
+    </li>
+    <li>
+      <a href="#ingress">Ingress</a>
+    </li>
+    <li>
+      <a href="#cicd">Setting up CI/CD and a Docker Registry</a>
+    </li>
+    <li>
+      <a href="#concluding">Concluding Thoughts</a>
+    </li>
+    <li>
+      <a href="#references">References/Inspiration</a>
+    </li>
+  </ul>
+</div>
+
+<h2 id="intro">Introduction</h2>
+<p>
+  Recently, I decided I wanted to setup my own Kubernetes cluster for personal
+  projects (not including this blog). I was kind of bored over the holidays and
+  remember reading a few months ago someone using
+  <a href="https://mbuffett.com/posts/kubernetes-setup/"
+    >Kubernetes for their own personal projects</a
+  >
+  and also reading the
+  <a href="https://news.ycombinator.com/item?id=26502900"
+    >discussion on Hacker News </a
+  >. I remember thinking that would be pretty cool. At my previous job, we used
+  K8s a lot, but it was a non-standard approach to using K8s (we primarily used
+  to schedule a ton of short duration jobs as opposed to long running services).
+  So, setting up K8s for my own projects would also be a learning process on
+  more normal usage of K8s.
+</p>
+
+<p>
+  I've attempted to set up K8s previously before as well, but each time the
+  compute costs really dampened my enthusiasm. Typical costs would be $30-40 a
+  month. Although it's possible to get a
+  <a
+    href="https://redmaple.tech/blogs/affordable-kubernetes-for-personal-projects/"
+    >fairly cheap GKE cluster</a
+  >, it requires the use of preemptible VMs, which means that the VM could be
+  shut down abruptly at any time and VMs only last 24 hours regardless (though I
+  think the example in the blog post could potentially be even cheaper!). AWS
+  and Azure seem even more expensive due to the cost of the control plane. One
+  of the main reasons I decided on DigitalOcean is that it's much much easier to
+  understand pricing than GCP and other cloud providers. I've also had a
+  generally positive experience with them in the past.
+</p>
+
+<p>
+  For example, I had some previous personal projects using DigitalOcean's App
+  Platform. App Platform was simple and worked without issues, but it has the
+  downside of costing a static amount a month regardless of usage. For my
+  personal projects which basically have no usage, that's a drain on the budget.
+  I kind of wish there was something like GCP's Cloud Run where you pay for
+  usage, but alas (at the point I hosted the personal projects Cloud Run didn't
+  support websockets which is needed for my app). Migrating those App Platform
+  projects to K8s could save some money if I can control my K8s costs.
+</p>
+
+<h4>Goals</h4>
+<ol>
+  <li>Set up Kubernetes while minimizing spend</li>
+  <li>Set up CI/CD for my projects to work with Kubernetes</li>
+</ol>
+
+<h4>Non-Goals</h4>
+<ul>
+  <li>
+    High availablility via having multiple nodes (this costs $$ which goes
+    against Goal #1)
+  </li>
+</ul>
+
+<h2 id="ingress">Ingress</h2>
+<p>
+  The process of clicking through the UI and making a 1 node cluster by itself
+  was pretty mundane so I'll skip the details. I picked the cheapest nodes that
+  were using AMD ($12/month). The first interesting challenge was setting up
+  Ingress.
+  <a href="https://kubernetes.io/docs/concepts/services-networking/ingress/"
+    >Ingress</a
+  >
+  is a K8s object that manages external access to the services in a cluster. In
+  order to run web services, you definitely need it. Typically, one also need a
+  load balancer. For example, the
+  <a
+    href="https://www.digitalocean.com/community/tutorials/how-to-set-up-an-nginx-ingress-on-digitalocean-kubernetes-using-helm"
+    >DigitalOcean tutorial that describes how to set up Nginx Ingress and cert
+    manager</a
+  >
+  uses a DigitalOcean Load Balancer (which costs $10/month). That's a hefty
+  price tag compared to the compute cost so I wanted to avoid using that.
+</p>
+
+<p>
+  I stumbled upon this
+  <a
+    href="https://mike.sg/2021/08/31/digitalocean-kubernetes-without-a-load-balancer/"
+    >this blog post</a
+  >
+  and this
+  <a
+    href="https://stackoverflow.com/questions/37792641/how-can-you-publish-a-kubernetes-service-without-using-the-type-loadbalancer-on"
+    >StackOverflow answer</a
+  >
+  which helped me figure it out.
+</p>
+
+This is what my helm config file ended up being.
+<pre><code>---
+controller:
+  kind: DaemonSet
+  daemonset:
+    useHostPort: true
+  dnsPolicy: ClusterFirstWithHostNet
+  hostNetwork: true
+  service:
+    type: ClusterIP
+  priorityClassName: high-priority
+  nodeSelector:
+    loadbalancer: nginx
+  config: {
+      #long timeout for websockets
+      proxy-read-timeout: 86400,
+    }
+rbac:
+  create: true</code>
+</pre>
+<p>
+  It's very similar to the example to the aforementioned blog post. But I'll
+  comment on it a little bit. The first notable thing <i>type: ClusterIP</i>.
+  That prevents the default of <i>type: LoadBalancer</i> from automatically
+  creating a DigitalOcean load balancer, which would result in additional
+  billing charges. This has the additional implication that this service is only
+  reachable from within the cluster itself, which is something you have to fix.
+</p>
+
+<p>
+  The more important configuration, and the key to this whole method is the
+  <i>hostNetwork: true</i> setting. This means that the nginx Daemon can
+  directly use the host computer's networking and bind to ports 80/443. Then, if
+  one was to access the IP of the host computer directly (assuming a firewall
+  rule has been created to allow traffic through), one would be able to interact
+  with the nginx server directly. For example, assume the IP is 198.51.100.0. If
+  someone from outside the cluster pointed their browser to 198.51.100.0, nginx
+  would serve traffic to them on port 80 . The only downside is that in K8s
+  services could move around to various nodes all the time, resulting in a
+  different IP that an external service would need to connect to in order to be
+  served by nginx. My strategy to avoid this is to use <i>nodeSelector</i> to
+  force the nginx server onto a node with the label <i>loadbalancer: nginx</i>.
+  Then on the droplet of interest, I ran
+  <code>kubectl label nodes node_name loadbalancer=nginx</code> and forced the
+  nginx server to always run on that droplet. With that, I can simply access
+  that IP whenever I want to access the nginx server.
+</p>
+
+<p>
+  This setup is great, but I quickly discovered one issue. When I started adding
+  my services for my side projects to my cluster, my cluster would be over
+  overcommitted and my nginx server would be shut down in favor of other
+  services. To avoid that, I create a <i>PriorityClass</i> called
+  <i>high-priority</i> so that nginx will always be prioritized to be run.
+</p>
+
+<p>
+  Additionally, it turns out you can actually assign a floating IP to this
+  droplet that has the nginx server despite
+  <a
+    href="https://docs.digitalocean.com/products/networking/floating-ips/#limits"
+    >the documentation claiming</a
+  >
+  it's not possible. See
+  <a href="https://haim.dev/posts/2021-12-30-floating-ip-on-digital-ocean-k8s/"
+    >this other blog post</a
+  >
+  for someone who took advantage of this fact for more advanced strategies. By
+  assigning a floating IP to our droplet IP and direct all public DNS records to
+  the floating IP, swapping which droplet the nginx server is on shouldn't be
+  too painful in the future.
+</p>
+
+<p>
+  With this setup, setting up certbot and nginx to properly reverse proxy to the
+  correct services was relatively straightforward by following the
+  <a
+    href="https://www.digitalocean.com/community/tutorials/how-to-set-up-an-nginx-ingress-on-digitalocean-kubernetes-using-helm"
+    >tutorial</a
+  >. The biggest major snag I ran into was in general the resource constraints
+  on my 1 node cluster. The default services that DigitalOcean adds to my
+  cluster and their CPU requested are cilium (300m), 2 instances of coredns
+  (100m each), and 1 digitalocean-node-agent (102m). All that adds up to
+  <b>602m</b> of a total of <b>900m</b> allocatable CPU or 66.9% of my compute
+  resources. That doesn't leave much space at all for anything else! I couldn't
+  run Prometheus/Grafana without basically using up all the remaining compute. I
+  suppose that's the cost of being on a low budget setup.
+</p>
+
+<p>
+  Another minor issue I ran into was that <i>metrics-server</i> doesn't work
+  installed out of the box. Luckily, DigitalOcean provides a
+  <a
+    href="https://www.digitalocean.com/community/tutorials/how-to-autoscale-your-workloads-on-digitalocean-kubernetes"
+    >tutorial</a
+  >
+  to handle this. Apparently, you have to pass the flag
+  <code>--kubelet-preferred-address-types=InternalIP</code> through to make
+  <i>metrics-server</i> work.
+</p>
+
+<h2 id="cicd">Setting up CI/CD and a Docker Registry</h2>
+<p>
+  As mentioned earlier, setting up CI/CD is one of my goals. Manually deploying
+  is just a pain so having it do it automatically is great!
+</p>
+
+<p>
+  The first problem I encountered was that the free tier of the Container
+  Registry that DigitalOcean provides only has 500MB of storage. The docker of
+  image of my
+  <a href="https://github.com/liboz/PandemicOnline">PandemicOnline server</a>
+  was over 400 MB. When I made a single small dependency update and uploaded it
+  to my registry, I broke the storage limit on the free tier. I suppose I could
+  have optimized my Node.js server's Docker image, but given that this seems
+  like a problem that will keep occuring with this small of a storage limit, I
+  figured that wasn't sustainable. The cheapest paid plan of the Container
+  Registry only offers 5GB and costs $5/month. For that price, I might as well
+  self host a docker registry on a droplet, which comes with 25GB.
+</p>
+
+<p>
+  I could have hosted the registry on the K8s cluster, but I'd have to attach
+  more permanent storage, which is also a bit of a pain. Hosting on a droplet
+  also prevents a potential circular dependency issue where the K8s depends on
+  the docker registry, but the docker registry can't boot up because K8s is
+  dead. I took inspiration from
+  <a href="https://mike.sg/2021/09/06/setting-up-a-self-hosted-docker-registry/"
+    >Mike Cartmell's blog post</a
+  >
+  where he does something similar. Like him, I used docker-compose so my server
+  could boot up a server + the container registry. I initially set it up using
+  nginx. Setting up the cert with Let’s Encrypt was quite involved. Even the so
+  called
+  <a href="https://github.com/JonasAlfredsson/docker-nginx-certbot"
+    >docker-nginx-certbot</a
+  >, which was supposed to make it easy to set up SSL was not trivial. I
+  eventually got it working, but it was a huge ordeal.
+</p>
+
+<p>
+  I've read about <a href="https://caddyserver.com/">Caddy</a> on Hacker News
+  before so I decided to experiment with it a bit to see how easy it was to use.
+  It was honestly extremely simple. Everything just worked on my first try and I
+  simply needed a single <i>Caddyfile</i> to handle my server.
+</p>
+
+<pre><code>(auth) {
+	basicauth {
+        [REDACTED username] [REDACTED password]
+    }
+}
+
+[REDACTED].com {
+    import auth
+    reverse_proxy /v2* registry:5000
+
+    log {
+        output file /var/log/registry-access.log
+    }
+}</code></pre>
+and it was all good to go.
+
+<p>This is what my <i>docker-compose.yml</i> looks like</p>
+<pre><code>version: "2.0"
+services:
+  caddy:
+    restart: always
+    image: caddy:2
+    container_name: caddy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - "./Caddyfile:/etc/caddy/Caddyfile:ro"
+      - "./caddy-logs:/var/log/"
+      - "./caddy-config:/config"
+      - "./caddy-data:/data"
+  registry:
+    restart: always
+    image: registry:2.7
+    container_name: registry
+    ports:
+      # accessible via localhost:2879
+      - 2879:5000
+    volumes:
+      - ./data:/var/lib/registry
+</code></pre>
+
+<p>
+  Life was a lot simpler with Caddy and I'll definitely consider using them
+  again in the future.
+</p>
+
+<p>
+  After setting up my container server, I followed the
+  <a
+    href="https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/"
+    >documentation</a
+  >
+  and added a secret to my cluster to integrate it. It worked without an issue.
+</p>
+
+<p>
+  One other interesting decision I had was how to automatically ensure CI/CD
+  would pick the right tag of a Docker image. I tag my images with their Git
+  short SHA and really wanted to a way to determine what the latest tag of an
+  image is so that when I do continuous delivery, it knows when a new image
+  needs to be pulled and when it doesn't. Unfortunately, the docker registry API
+  doesn't provide an easy way to pull image by upload date or something like
+  that.
+</p>
+
+<p>
+  I solved this by making it so that whenever a new image is built, I update a
+  <i>ConfigMap</i> with the latest tag. Then, in my CI/CD I simply look up the
+  latest value of the ConfigMap and use <i>sed</i> to do a replacement on the
+  appropriate <i>yaml</i> configs. After that, I can safely run
+  <code>kubectl -f apply</code> on all my <i>yaml</i> configs. K8s will then
+  automatically figure out if new pods with the an updated image needs to be
+  spun up or not.
+</p>
+
+<h2 id="concluding">Concluding Thoughts</h2>
+<table>
+  <tr>
+    <td>Item</td>
+    <td>Cost/Month</td>
+  </tr>
+  <tr>
+    <td>Control plan</td>
+    <td>$0</td>
+  </tr>
+  <tr>
+    <td>1 Premium AMD (1 vCPU, 2GB total RAM with 1 GB of usable RAM) Node</td>
+    <td>$12</td>
+  </tr>
+  <tr>
+    <td>1 Premium AMD Droplet (1 vCPU, 1GB total RAM) for Registry Server</td>
+    <td>$6</td>
+  </tr>
+  <tr>
+    <td>Total</td>
+    <td>$18</td>
+  </tr>
+</table>
+<p>
+  If I had used Intel CPUs instead, this would only cost $15 a month, but I
+  prefer using AMD. Without a separate Container Registry, this would only be
+  $12/month.
+</p>
+
+<h4>Takeaways</h4>
+<ul>
+  <li>Kubernetes doesn't have to super expensive to set up.</li>
+  <li>
+    Hosting your own Container Registry is not too bad. Perhaps the real cost is
+    in the upkeep and pruning of old files.
+  </li>
+  <li>
+    Caddy is pretty easy to use and I will definitely be trying it again in the
+    future.
+  </li>
+</ul>
+
+<h2 id="references">References/Inspiration</h2>
+<ul>
+  <li>
+    <a href="https://mbuffett.com/posts/kubernetes-setup/"
+      >Unironically Using Kubernetes for my Personal Blog</a
+    >
+    and the
+    <a href="https://news.ycombinator.com/item?id=26502900"
+      >related Hacker News Comments</a
+    >
+  </li>
+  <li>
+    Mike Cartmell's blog, where he does something similar:
+    <a
+      href="https://mike.sg/2021/08/31/digitalocean-kubernetes-without-a-load-balancer/"
+      >DigitalOcean Kubernetes Without a Load Balancer</a
+    >
+    <a
+      href="https://mike.sg/2021/09/06/setting-up-a-self-hosted-docker-registry/"
+    >
+      Setting Up a Self-Hosted Docker Registry
+    </a>
+  </li>
+  <li>
+    DigitalOcean Tutorials:
+    <a
+      href="https://www.digitalocean.com/community/tutorials/how-to-set-up-an-nginx-ingress-on-digitalocean-kubernetes-using-helm"
+      >How To Set Up an Nginx Ingress on DigitalOcean Kubernetes Using Helm</a
+    >
+    <a
+      href="https://www.digitalocean.com/community/tutorials/how-to-autoscale-your-workloads-on-digitalocean-kubernetes"
+      >How To Autoscale Your Workloads on DigitalOcean Kubernetes</a
+    >
+  </li>
+  <li>
+    Kubernetes docs:
+    <a
+      href="https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/"
+      >Pull an Image from a Private Registry</a
+    >
+    <a href="https://kubernetes.github.io/ingress-nginx/deploy/baremetal/"
+      >Bare-metal considerations for NGINX Ingress Controller
+    </a>
+    <a href="https://kubernetes.io/docs/concepts/services-networking/service/"
+      >Service</a
+    >
+    <a
+      href="https://kubernetes.io/docs/concepts/services-networking/dns-pod-service/"
+      >DNS for Services and Pods</a
+    >
+  </li>
+  <li>
+    <a
+      href="https://alesnosek.com/blog/2017/02/14/accessing-kubernetes-pods-from-outside-of-the-cluster/"
+      >Accessing Kubernetes Pods from Outside of the Cluster</a
+    >
+  </li>
+</ul>
+
+<style>
+  #toc_container {
+    border: 1px solid #aaa;
+    display: table;
+    font-size: 85%;
+    margin-bottom: 1em;
+    padding: 10px;
+    width: auto;
+  }
+  .toc_title {
+    font-weight: 700;
+    text-align: center;
+  }
+</style>
