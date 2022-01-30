@@ -1,0 +1,165 @@
+<blurb>The mystery of .NET's ping implementation on Linux</blurb>
+
+<p>
+  Because I'm frequently annoyed by internet disconnects, a few years back I
+  wrote a F# console app that would send an ICMP ping to selected targets every
+  500ms. Recently, I decided to modernize it to .NET Core, Dockerize it, and run
+  it on a Linux box. I mostly did my development in WSL (Windows Subsystem for
+  Linux). I encountered some very odd issues and I'll describe what happened.
+</p>
+
+<p>
+  Running the console app locally in Windows had been fine and remained without
+  any issues at all. However, when I attempted to run my app in WSL 2 via
+  Docker, I quickly ran into an issue. Even when pings were being sent without
+  any timeouts at all in Windows, running it in Linux would after ~2-3s result
+  in over half the pings returning a timeout. This behavior made it so that the
+  app was effectively useless in Linux. I suspect there was some rate limit that
+  started to block my app after a few seconds due to the relatively rapid pings.
+  There was some odd bug in Linux.
+</p>
+
+<p>
+  My first guess as to the reason behind this bug was that WSL was simply not
+  quite the same as an actual Linux machine and maybe pinging just didn't work
+  perfectly. I've encountered WSL behaving weirdly before, so it's not that
+  unexpected. To test this, I used a VM in DigitalOcean to run my app. No issue
+  at all!
+</p>
+
+<p>
+  So, it wasn't an issue with all Linux systems. Just with my Linux system. My
+  next step was to use a non-.NET based ping utility and try my luck. Using the
+  standard ping tool, I ran
+  <code>ping google.com -i 0.05</code> on my WSL instance.
+</p>
+
+<p>
+  The result was 0 timeouts. The behavior was completely different from my .NET
+  based ping utility. Okay, so now I know that some ping implementations would
+  work in WSL, just not the .NET one. The next step was to figure out why only
+  approximately 50% of the pings in my .NET utility returned timeouts in WSL. I
+  started reading the
+  <a href="https://github.com/.NET/corefx/pull/4484">source code</a> of the .NET
+  implementation of <i>SendPingAsync</i>. I saw that it set up raw sockets for
+  each ICMP ping it sent. Because of this, I thought that perhaps there was
+  buildup in sockets in WSL. As far as I could tell with things like
+  <i>lsof</i> there was nothing weird happening. So, I set up strace and looked
+  around for system calls where sockets were being used. I spent a few hours
+  doing this, but... honestly there didn't appear to be any system call
+  differences between ping attempts that worked and ping attempts that failed.
+  It seemed like randomly half of the calls would simply fail for no discernible
+  reason.
+</p>
+
+<p>
+  Since the app worked fine on DigitalOcean's Linux VM, I was fairly confident
+  that it was some WSL issue. So, I set up a local Linux box and hope it would
+  work. Sadly, the local Linux box (non-VM) also experienced the same issue with
+  the same behavior. I guess it wasn't WSL after all.
+</p>
+
+<p>
+  I was pretty stumped. I started poking around my router settings for unrelated
+  reasons and stumbled upon a security log. In there, I discovered the following
+  logs (slightly modified).
+</p>
+
+<pre><code>1 	Jan 22 04:06:02 	kern 	alert 	attack 	kernel: PING OF DEATH ATTACK:SRC=192.0.2.0 DST=142.250.80.14 LEN=60 TOS=0x00 PREC=0x00 TTL=62 ID=41216 PROTO=ICMP TYPE=8 CODE=0 ID=64839 SEQ=0
+2 	Jan 22 04:06:01 	kern 	alert 	attack 	kernel: PING OF DEATH ATTACK:SRC=192.0.2.0 DST=142.250.80.14 LEN=60 TOS=0x00 PREC=0x00 TTL=62 ID=41215 PROTO=ICMP TYPE=8 CODE=0 ID=64837 SEQ=0
+3 	Jan 22 04:06:01 	kern 	alert 	attack 	kernel: PING OF DEATH ATTACK:SRC=192.0.2.0 DST=142.250.80.14 LEN=60 TOS=0x00 PREC=0x00 TTL=62 ID=41214 PROTO=ICMP TYPE=8 CODE=0 ID=64835 SEQ=0</code></pre>
+
+<p>
+  Oh! My own router was blocking my pings because it thought I was an attacker.
+  But why would it only block pings on Linux and only pings in the .NET
+  implementation? .NET on Windows worked completely fine and the standard
+  <i>ping</i> utility in Linux worked fine too. This was very confusing, but I
+  finally felt like I had a lead on something.
+</p>
+
+<p>
+  I downloaded <a href="https://www.wireshark.org/">Wireshark</a> and started
+  listening to my network interface, filtering for ICMP pings. While doing that
+  I also ran my .NET app on Windows and looked at all the parameters. Then, I
+  did the same in Linux and in Linux with the <i>ping</i> utility.
+</p>
+
+<p>
+  It turns out the main difference is in how the ID and Sequence Number are used
+  by the various implementations. Those two properties are used in the following
+  way according to the
+  <a href="https://datatracker.ietf.org/doc/html/rfc792">spec</a>:
+</p>
+
+<pre><code>Identifier
+
+      If code = 0, an identifier to aid in matching echos and replies,
+      may be zero.
+
+Sequence Number
+
+      If code = 0, a sequence number to aid in matching echos and
+      replies, may be zero.</code></pre>
+
+<p>
+  It seems that should be able to be used in the same way. Here's a table
+  showing how the various ping implementations differ in their usage of ID and
+  Sequence Number.
+</p>
+
+<table>
+  <tr>
+    <th></th>
+    <th>Identifier</th>
+    <th>Sequence Number</th>
+  </tr>
+  <tr>
+    <td>Linux <i>ping</i> CLI</td>
+    <td>Constant</td>
+    <td>Incrementing</td>
+  </tr>
+  <tr>
+    <td>Windows ICMP system call</td>
+    <td>Constant</td>
+    <td>Incrementing</td>
+  </tr>
+  <tr>
+    <td>.NET <i>SendPingAsync</i> in Linux</td>
+    <td>Incrementing</td>
+    <td>Constant</td>
+  </tr>
+</table>
+
+<p>
+  At this point, I downloaded the
+  <a href="https://github.com/go-ping/ping">go-ping</a> library, modified it to
+  control the incrementing myself to test what happens with my router. I
+  discovered that an incrementing identifier was what would cause my router to
+  think it is a <i>Ping of Death</i> attack.
+</p>
+
+<p>
+  I now wanted to know why .NET chose to implement ping in this way that
+  differed in behavior from these other pingers. Digging into github, the reason
+  for this divergence appears to be to mimic Mono's implementation of
+  <i>SendPingAsync</i> (See discussion
+  <a href="https://github.com/.NET/runtime/issues/18933">here</a>
+  and the
+  <a
+    href="https://github.com/mono/mono/blob/8994ce8a09a101e7965a820ed7dc148d9685f89f/mcs/class/System/System.Net.NetworkInformation/Ping.cs#L254"
+    >relevant source</a
+  >
+  <a
+    href="https://github.com/mono/mono/blob/8994ce8a09a101e7965a820ed7dc148d9685f89f/mcs/class/System/System.Net.NetworkInformation/Ping.cs#L441"
+    >code parts</a
+  >.) I'm not sure why Mono was implemented in this manner, but I guess that's
+  what caused all this pain.
+</p>
+
+<p>
+  Armed with this knowledge, I realized making my own manual ping implementation
+  was likely too painful in .NET as I'd have to use unsafe code. I ported my app
+  entirely to golang and called it a day. I learned about raw sockets and how to
+  use strace and wireshark, but I do wish I could have been spared this pain. I
+  suppose that's the price of learning.
+</p>
