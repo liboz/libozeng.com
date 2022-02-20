@@ -13,6 +13,9 @@
       <a href="#cicd">Setting up CI/CD and a Docker Registry</a>
     </li>
     <li>
+      <a href="#addendum">Addendum 2-20-2022</a>
+    </li>
+    <li>
       <a href="#concluding">Concluding Thoughts</a>
     </li>
     <li>
@@ -338,6 +341,301 @@ services:
   spun up or not.
 </p>
 
+<h2 id="addendum">Addendum 2-20-2022</h2>
+<p><i>This was added after the initial posting.</i></p>
+<p>
+  The aforementioned setup worked reasonably well... until DigitalOcean did an
+  automated node upgrade, which destroyed the node set up with the tag
+  <i>loadbalancer: nginx</i>. This meant that no node had that set up and nginx
+  would not get created on any node at all, which meant no web traffic could be
+  served. In addition, the special firewall rule I created was also removed from
+  my specially prepared node. My whole set up was basically ruined.
+</p>
+<p>
+  My solution was to set up a service inside the k8s cluster itself to detect
+  these undesireable conditions. This is what the flow chart generally looks
+  like:
+</p>
+
+<ul class="tree">
+  <li>
+    <code>Http Server Reachable</code>
+    <ul>
+      <li>
+        <code>Yes</code>
+        <ul>
+          <li><code>🎉</code></li>
+        </ul>
+      </li>
+      <li>
+        <code>No</code>
+        <ul>
+          <li>
+            <code>Check for existence of nginx pod</code>
+            <ul>
+              <li>
+                <code>Yes</code>
+                <ul>
+                  <li>
+                    <code
+                      >Add Floating IP to the droplet matching the node name
+                      where the pod exists on</code
+                    >
+                  </li>
+                </ul>
+              </li>
+              <li>
+                <code>No</code>
+                <ul>
+                  <li>
+                    <code
+                      >Add "loadbalancer: nginx" tag to the single node</code
+                    >
+                    <ul>
+                      <code
+                        >Add Floating IP to the droplet matching the node name
+                        where the pod exists on</code
+                      >
+                    </ul>
+                  </li>
+                </ul>
+              </li>
+            </ul>
+          </li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+</ul>
+
+<p>
+  The only additional complication is that because the request comes from inside
+  the cluster, firewall rules will automatically let in any request regardless
+  of how it would treat external traffic. Because of this, I always do a check
+  that the firewall rule is applied to some k8s droplet and add it if it is
+  needed.
+</p>
+
+<p>
+  You'll need to pass in 4 arguments representing: <i>HOSTNAME</i>,
+  <i>FLOATING_IP</i>, <i>FIREWALL_ID</i>, <i>DIGITALOCEAN_API_TOKEN</i>. The API
+  token can be created via
+  <a
+    href="https://docs.digitalocean.com/reference/api/create-personal-access-token/"
+    >these instructions</a
+  >
+  and you can use that to find the FIREWALL_ID for the relevant firewall.
+</p>
+<p>
+  In terms of the kubernetes configurations, the important thing is that you
+  will need to create a <i>ServiceAccount</i> and use
+  <i>ClusterRoleBinding</i> to bind a <i>ClusterRole</i> that allows that
+  account to <i>list</i> and <i>patch</i> both <i>pods</i> and <i>nodes</i>. In
+  addition, standard ingress will also need to be set up to allow using the host
+  to passed in earlier to route to the pod where the http server is set up. Note
+  that although this works for me, it may not work for you.
+</p>
+<button type="button" id="code-button" onclick="onCodeButtonClick()">
+  See Code
+</button>
+<div id="k8s-go-code" style="display: none">
+  <pre><code>package main
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log"
+	"net/http"
+	"os"
+	"time"
+
+	"github.com/digitalocean/godo"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+)
+
+func AliveResponse(w http.ResponseWriter, r *http.Request) {
+	//log.Print("Request from ", r.RemoteAddr)
+}
+
+func GetFirewallRuleInfo(ctx context.Context, client *godo.Client, firewallId string) (*godo.Firewall, error) {
+	firewall, _, err := client.Firewalls.Get(ctx, firewallId)
+	return firewall, err
+}
+
+func AddFirewallToDroplet(ctx context.Context, client *godo.Client, droplet godo.Droplet, firewallId string) error {
+	log.Printf("Adding firewall rule %s to droplet %s", firewallId, droplet.Name)
+	_, err := client.Firewalls.AddDroplets(ctx, firewallId, droplet.ID)
+	return err
+}
+
+func GetKubernetesDroplet(ctx context.Context, client *godo.Client) (godo.Droplet, error) {
+	droplets, _, err := client.Droplets.List(ctx, nil)
+	if err != nil {
+		log.Printf("Droplets.List returned error: %v", err)
+		return godo.Droplet{}, err
+	}
+
+	var targetDroplet godo.Droplet
+outer:
+	for _, droplet := range droplets {
+		for _, tag := range droplet.Tags {
+			if tag == "k8s" {
+				targetDroplet = droplet
+				break outer
+			}
+		}
+	}
+
+	if targetDroplet.Name == "" {
+		errorString := fmt.Sprintf("Could not find droplet with k8s tag. Found %v\n", droplets)
+		log.Print(errorString)
+		return godo.Droplet{}, errors.New(errorString)
+	}
+
+	return targetDroplet, nil
+}
+
+func AddFloatingIPToDroplet(ctx context.Context, client *godo.Client, targetDroplet godo.Droplet, floatingIP string) error {
+	floatingIPResult, _, err := client.FloatingIPs.Get(ctx, floatingIP)
+	if err != nil {
+		log.Printf("get for floatingIp returned error: %v", err)
+		return err
+	}
+
+	if floatingIPResult.Droplet != nil {
+		log.Print("floating Ip already assigned")
+		return nil
+	}
+
+	log.Printf("Assigning %s to %s\n", floatingIP, targetDroplet.Name)
+	_, _, err = client.FloatingIPActions.Assign(ctx, floatingIP, targetDroplet.ID)
+	if err != nil {
+		log.Printf("assigning floating ip returned error: %v", err)
+		return err
+	}
+
+	return nil
+}
+
+func main() {
+	args := os.Args[1:]
+	host := args[0]
+	floatingIP := args[1]
+	firewallId := args[2]
+	digitalOceanToken := args[3]
+
+	log.Printf("Floating Ip: %s, Host: %s, firewallId: %s\n", floatingIP, host, firewallId)
+
+	digitalOceanClient := godo.NewFromToken(digitalOceanToken)
+
+	go func() {
+		http.HandleFunc("/", AliveResponse)
+		log.Fatal(http.ListenAndServe(":8000", nil))
+	}()
+
+	config, err := rest.InClusterConfig()
+	if err != nil {
+		panic(err.Error())
+	}
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		panic(err.Error())
+	}
+	opts := metav1.ListOptions{
+		LabelSelector: "app.kubernetes.io/name=ingress-nginx",
+	}
+
+	labelPatch := []byte(`{"metadata":{"labels":{"loadbalancer": "nginx"}}}`)
+
+	var httpClient = &http.Client{
+		Timeout: time.Second * 5,
+	}
+	httpRequest, err := http.NewRequest("GET", "http://"+floatingIP, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+	httpRequest.Host = host
+
+	i := 0
+	for {
+		if i > 0 {
+			time.Sleep(10 * time.Second)
+		}
+		i += 1
+
+		ctx := context.TODO()
+
+		// We're running this from within the k8s cluster and digitalocean's kubernetes cluster allows all internal ips through its firewalls.
+		// That means an http request won't tell us if the firewall is working or not. So, we should always check the firewall
+		firewall, err := GetFirewallRuleInfo(ctx, digitalOceanClient, firewallId)
+		if err != nil {
+			log.Printf("error getting firewall info %v\n", err)
+			continue
+		}
+
+		targetDroplet, err := GetKubernetesDroplet(ctx, digitalOceanClient)
+		if err != nil {
+			// error is logged in the function so don't print again
+			continue
+		}
+
+		if len(firewall.DropletIDs) == 0 {
+			err = AddFirewallToDroplet(ctx, digitalOceanClient, targetDroplet, firewallId)
+			if err != nil {
+				log.Printf("Error adding to firewall rule %s to droplet %s: %v\n", firewallId, targetDroplet.Name, err)
+			} else {
+				log.Printf("Succesfully added firewall rule %s to droplet %s", firewallId, targetDroplet.Name)
+			}
+		}
+
+		resp, err := httpClient.Do(httpRequest)
+		if err != nil {
+			log.Printf("error making request %v\n", err)
+		} else if resp.StatusCode == 200 {
+			if i > 0 && i%100 == 0 {
+				log.Printf("no issues on iteration %d\n", i)
+			}
+			continue
+		}
+
+		log.Printf("Trying to allow node to serve the http request \n")
+
+		pods, err := clientset.CoreV1().Pods("").List(ctx, opts)
+
+		if err != nil {
+			log.Fatal(fmt.Sprintf("Error querying pods: %v", err.Error()))
+		}
+
+		if len(pods.Items) != 1 {
+			log.Printf("There are %d pods in the cluster, not the 1 expected\n", len(pods.Items))
+			if err != nil {
+				log.Fatal(fmt.Sprintf("Error querying pods: %v", err.Error()))
+			}
+
+			log.Printf("Applying label loadbalancer=nginx to node %s\n", targetDroplet.Name)
+			node, err := clientset.CoreV1().Nodes().Patch(ctx, targetDroplet.Name, types.StrategicMergePatchType, labelPatch, metav1.PatchOptions{})
+			if err != nil {
+				log.Fatal(fmt.Sprintf("Error updating node: %v", err.Error()))
+			}
+
+			log.Printf("Node %s now has labels %v on it.\n", node.Name, node.Labels)
+		} else {
+			log.Printf("There are %d pods in the cluster %s\n", len(pods.Items), pods.Items[0].Name)
+		}
+
+		err = AddFloatingIPToDroplet(ctx, digitalOceanClient, targetDroplet, floatingIP)
+		if err == nil {
+			log.Printf("Succesfully assigned %s to %s\n", floatingIP, targetDroplet.Name)
+		}
+	}
+}
+</code></pre>
+</div>
+
 <h2 id="concluding">Concluding Thoughts</h2>
 <table>
   <tr>
@@ -377,6 +675,10 @@ services:
   <li>
     Caddy is pretty easy to use and I will definitely be trying it again in the
     future.
+  </li>
+  <li>
+    Addendum 2-20-2022: Setting up the system to autoheal on pod deletion
+    required a little additional work, but it wasn't too bad.
   </li>
 </ul>
 
@@ -452,4 +754,106 @@ services:
     font-weight: 700;
     text-align: center;
   }
+
+  /* From https://medium.com/@ross.angus/sitemaps-and-dom-structure-from-nested-unordered-lists-eab2b02950cf */
+  /* It's supposed to look like a tree diagram */
+  .tree,
+  .tree ul,
+  .tree li {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    position: relative;
+  }
+
+  .tree {
+    margin: 0 0 1em;
+    text-align: center;
+  }
+  .tree,
+  .tree ul {
+    display: table;
+  }
+  .tree ul {
+    width: 100%;
+  }
+  .tree li {
+    display: table-cell;
+    padding: 0.5em 0;
+    vertical-align: top;
+  }
+  /* _________ */
+  .tree li:before {
+    outline: solid 1px #666;
+    content: "";
+    left: 0;
+    position: absolute;
+    right: 0;
+    top: 0;
+  }
+  .tree li:first-child:before {
+    left: 50%;
+  }
+  .tree li:last-child:before {
+    right: 50%;
+  }
+
+  .tree code,
+  .tree span {
+    border: solid 0.1em #666;
+    border-radius: 0.2em;
+    display: inline-block;
+    margin: 0 0.2em 0.5em;
+    padding: 0.2em 0.5em;
+    position: relative;
+  }
+  /* If the tree represents DOM structure */
+  .tree code {
+    font-family: monaco, Consolas, "Lucida Console", monospace;
+  }
+
+  /* | */
+  .tree ul:before,
+  .tree code:before,
+  .tree span:before {
+    outline: solid 1px #666;
+    content: "";
+    height: 0.5em;
+    left: 50%;
+    position: absolute;
+  }
+  .tree ul:before {
+    top: -0.5em;
+  }
+  .tree code:before,
+  .tree span:before {
+    top: -0.55em;
+  }
+
+  /* The root node doesn't connect upwards */
+  .tree > li {
+    margin-top: 0;
+  }
+  .tree > li:before,
+  .tree > li:after,
+  .tree > li > code:before,
+  .tree > li > span:before {
+    outline: none;
+  }
 </style>
+<script>
+  function onCodeButtonClick() {
+    var content = document.getElementById("k8s-go-code");
+    if (content.style.display === "block") {
+      content.style.display = "none";
+    } else {
+      content.style.display = "block";
+    }
+    var button = document.getElementById("code-button");
+    if (button.textContent.trim() === "See Code") {
+      button.textContent = "Hide Code";
+    } else {
+      button.textContent = "See Code";
+    }
+  }
+</script>
