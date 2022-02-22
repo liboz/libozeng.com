@@ -435,10 +435,9 @@ services:
   to passed in earlier to route to the pod where the http server is set up. Note
   that although this works for me, it may not work for you.
 </p>
-<button type="button" id="code-button" onclick="onCodeButtonClick()">
-  See Code
-</button>
-<div id="k8s-go-code" style="display: none">
+
+<details>
+  <summary>See/Hide Code</summary>
   <pre><code>package main
 
 import (
@@ -634,7 +633,7 @@ func main() {
 	}
 }
 </code></pre>
-</div>
+</details>
 
 <h2 id="concluding">Concluding Thoughts</h2>
 <table>
@@ -841,19 +840,3 @@ func main() {
     outline: none;
   }
 </style>
-<script>
-  function onCodeButtonClick() {
-    var content = document.getElementById("k8s-go-code");
-    if (content.style.display === "block") {
-      content.style.display = "none";
-    } else {
-      content.style.display = "block";
-    }
-    var button = document.getElementById("code-button");
-    if (button.textContent.trim() === "See Code") {
-      button.textContent = "Hide Code";
-    } else {
-      button.textContent = "See Code";
-    }
-  }
-</script>
