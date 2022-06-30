@@ -498,22 +498,22 @@ outer:
 	return targetDroplet, nil
 }
 
-func AddFloatingIPToDroplet(ctx context.Context, client *godo.Client, targetDroplet godo.Droplet, floatingIP string) error {
-	floatingIPResult, _, err := client.FloatingIPs.Get(ctx, floatingIP)
+func AddReservedIPToDroplet(ctx context.Context, client *godo.Client, targetDroplet godo.Droplet, reservedIP string) error {
+	reservedIPResult, _, err := client.ReservedIPs.Get(ctx, reservedIP)
 	if err != nil {
-		log.Printf("get for floatingIp returned error: %v", err)
+		log.Printf("get for reservedIP returned error: %v", err)
 		return err
 	}
 
-	if floatingIPResult.Droplet != nil {
-		log.Print("floating Ip already assigned")
+	if reservedIPResult.Droplet != nil {
+		log.Print("reservedIP already assigned")
 		return nil
 	}
 
-	log.Printf("Assigning %s to %s\n", floatingIP, targetDroplet.Name)
-	_, _, err = client.FloatingIPActions.Assign(ctx, floatingIP, targetDroplet.ID)
+	log.Printf("Assigning %s to %s\n", reservedIP, targetDroplet.Name)
+	_, _, err = client.ReservedIPActions.Assign(ctx, reservedIP, targetDroplet.ID)
 	if err != nil {
-		log.Printf("assigning floating ip returned error: %v", err)
+		log.Printf("assigning reservedIP returned error: %v", err)
 		return err
 	}
 
@@ -523,11 +523,11 @@ func AddFloatingIPToDroplet(ctx context.Context, client *godo.Client, targetDrop
 func main() {
 	args := os.Args[1:]
 	host := args[0]
-	floatingIP := args[1]
+	reservedIP := args[1]
 	firewallId := args[2]
 	digitalOceanToken := args[3]
 
-	log.Printf("Floating Ip: %s, Host: %s, firewallId: %s\n", floatingIP, host, firewallId)
+	log.Printf("Reserved Ip: %s, Host: %s, firewallId: %s\n", reservedIP, host, firewallId)
 
 	digitalOceanClient := godo.NewFromToken(digitalOceanToken)
 
@@ -553,7 +553,7 @@ func main() {
 	var httpClient = &http.Client{
 		Timeout: time.Second * 5,
 	}
-	httpRequest, err := http.NewRequest("GET", "http://"+floatingIP, nil)
+	httpRequest, err := http.NewRequest("GET", "http://"+reservedIP, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -626,9 +626,9 @@ func main() {
 			log.Printf("There are %d pods in the cluster %s\n", len(pods.Items), pods.Items[0].Name)
 		}
 
-		err = AddFloatingIPToDroplet(ctx, digitalOceanClient, targetDroplet, floatingIP)
+		err = AddReservedIPToDroplet(ctx, digitalOceanClient, targetDroplet, reservedIP)
 		if err == nil {
-			log.Printf("Succesfully assigned %s to %s\n", floatingIP, targetDroplet.Name)
+			log.Printf("Succesfully assigned %s to %s\n", reservedIP, targetDroplet.Name)
 		}
 	}
 }
