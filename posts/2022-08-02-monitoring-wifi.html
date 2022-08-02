@@ -1,0 +1,334 @@
+<blurb>Monitoring Wifi Connectivity</blurb>
+<tag>linux</tag>
+
+<div id="toc_container">
+  <p class="toc_title">Contents</p>
+  <ul>
+    <li>
+      <a href="#intro">Introduction</a>
+    </li>
+    <li>
+      <a href="#docker">Docker</a>
+    </li>
+    <li>
+      <a href="#ipvlan">IPvlan</a>
+    </li>
+    <li>
+      <a href="#references">References</a>
+    </li>
+  </ul>
+</div>
+
+<h2 id="intro">Introduction</h2>
+<p>
+  I monitor my home network connectivity by sending pings at well known sites
+  like <a href="google.com">google.com</a> and checking to see how many time
+  out. For this purpose, I set up my own Debian box so I can have 24/7
+  monitoring. I plot the number of timeouts in Grafana. The following is an
+  example of pings to <a href="facebook.com"></a>
+</p>
+
+<div>
+  <img src="assets/ping-facebook.png" loading="lazy" />
+</div>
+
+<p>
+  However, this Debian box is connected via Ethernet to my router and the
+  Ethernet is the default network interface for the Debian machine. Because of
+  that, my ping monitoring tool can only really monitor the status of the
+  Ethernet connectivity. Monitoring wifi connectivity is also a goal of mine.
+</p>
+
+<p>
+  This sounds like it should be easy. Just have the program send the ping via
+  the wifi network interface instead of the ethernet based one. In fact the
+  default
+  <code>ping</code> program can do this with flags in both Windows
+  (<code>-S</code>) and Linux (<code>-I</code>). However, I'm using a Golang
+  library <a href="https://github.com/go-ping/ping">go-ping</a>, which doesn't
+  support <a href="https://github.com/go-ping/ping/pull/204">that</a>.
+</p>
+
+<p>
+  However, even if <i>go-ping</i> supported changing interface, I'd be forced to
+  run the program directly. I've been using continers with Docker and Kubernetes
+  (k3s) so if possible I would prefer that. Furthermore, in k3s, changing to a
+  different network interface is quite challenging because you need to switch
+  from the default Flannel network overlay.
+</p>
+
+<h2 id="docker">Docker</h2>
+<p>
+  Luckily, Docker has more easily accessible networking options. While scouring
+  the web, I stumbled upon
+  <a
+    href="https://blog.oddbit.com/post/2018-03-12-using-docker-macvlan-networks/"
+    >this blog post</a
+  >, which begins with this line:
+</p>
+
+<figure>
+  <blockquote cite="https://hicu.be/macvlan-vs-ipvlan">
+    <p>
+      A question that crops up regularly on #docker is “How do I attach a
+      container directly to my local network?”
+    </p>
+  </blockquote>
+  <figcaption>
+    — Lars Kellogg-Stedman,
+    <cite
+      ><a
+        href="https://blog.oddbit.com/post/2018-03-12-using-docker-macvlan-networks/"
+        >https://blog.oddbit.com/post/2018-03-12-using-docker-macvlan-networks/</a
+      ></cite
+    >
+  </figcaption>
+</figure>
+
+<p>
+  That's exactly what I'm trying to do! So, I followed the instructions in the
+  blog post. But, I encounterd a problem. I couldn't connect from inside the
+  Docker container to the outside world using <i>macvlan</i>. It turns out
+  <i>macvlan</i> does not work on wifi network interfaces. The reason appears to
+  be the IEEE 802.11 standards do not allow this.
+</p>
+
+<figure>
+  <blockquote cite="https://hicu.be/macvlan-vs-ipvlan">
+    <p>
+      IEEE 802.11 doesn’t like multiple MAC addresses on a single client. It is
+      likely macvlan sub-interfaces will be blocked by your wireless interface
+      driver, AP or both.
+    </p>
+  </blockquote>
+  <figcaption>
+    —Random blogger,
+    <cite
+      ><a href="https://hicu.be/macvlan-vs-ipvlan"
+        >https://hicu.be/macvlan-vs-ipvlan</a
+      ></cite
+    >
+  </figcaption>
+</figure>
+
+<p>
+  Viewing the standards themselves requires a subscription, but I found a some
+
+  <a href="https://ipwithease.com/macvlan-vs-ipvlan-understand-the-difference/"
+    >other</a
+  >
+  <a
+    href="https://stackoverflow.com/questions/56900857/docker-network-macvlan-driver-gateway-unreachable"
+    >sources</a
+  >
+  on the internet also claiming that <i>macvlan</i> won't work with wifi network
+  interfaces. With this newfound knowledge, I changed my commands to use
+  <i>ipvlan</i>
+  instead and everything mostly just worked!
+</p>
+
+<p>
+  My router/DHCP server assigned IPs from the range of
+  <i>192.168.1.25</i>-<i>192.168.1.200</i> with a gateway at
+  <i><i>192.168.1.1</i></i
+  >. In order to avoid overlap, I picked the range <i>192.168.1.208/28</i>,
+  which corresponds to the 16 ip addresses from
+  <i>192.168.1.208</i>-<i>192.168.1.223</i>. I picked <i>192.168.1.222</i> to
+  reserve for use by my host interface. Also note that apparently, network
+  interfaces can
+  <a href="https://github.com/benzea/gnome-network-displays/issues/70">only</a>
+  have 15 characters in their name. Thus, my script was
+</p>
+
+<pre>
+<code>docker network create -d ipvlan -o parent=my_wifi_adapter \
+ --subnet 192.168.1.0/24 \
+ --gateway 192.168.1.1 \
+ --ip-range 192.168.1.208/28 \
+ --aux-address 'host=192.168.1.222' \
+ wifi_ipvlan
+
+ip link add wifi-shim link my_wifi_adapter type ipvlan mode l2
+ip addr add 192.168.1.222/32 dev wifi-shim
+ip link set wifi-shim up
+ip route add 192.168.1.208/28 dev wifi-shim
+</code></pre>
+
+<p>
+  The other thing that wasn't mentioned in the Lars Kellogg-Stedman blog post
+  was how to make the settings persistent (in Debian) through restarts. I
+  initially thought I could just run my script through <i>crontab</i> (i.e.
+  <code>sudo crontab -e</code> and adding a line with
+  <code>@reboot path_to_my_script.sh</code>). This turned out not to be viable
+  because the <i>crontab</i> would run before the interface was discoverable. I
+  tried adding some minor amounts of sleep, but it required a lot more sleep
+  than I wanted (20s).
+</p>
+
+<p>
+  I ended up modifying my <i>/etc/network/interfaces</i> file to ensure
+  persistency. I found some examples on
+  <a
+    href="https://unix.stackexchange.com/questions/476539/how-to-make-ip-commands-persist
+"
+    >various</a
+  >
+  <a
+    href="https://antonneld.wordpress.com/2018/07/03/giving-the-host-a-macvlan/"
+    >places</a
+  >
+  <a
+    href="https://www.cyberciti.biz/faq/ip-route-add-network-command-for-linux-explained/
+"
+    >online</a
+  >. I ended up with the following config:
+</p>
+
+<pre><code>#ipvlan for docker connecting only to wifi
+auto wifi-shim #start up automatically
+iface wifi-shim inet manual
+    pre-up /sbin/ip link add wifi-shim link my_wifi_adapter type ipvlan mode l2
+    up /sbin/ip addr add 192.168.1.222/32 dev wifi-shim
+    post-up /sbin/ip route add 192.168.1.208/28 dev wifi-shim
+    post-down /sbin/ip link del wifi-shim</code>
+</pre>
+
+<p>
+  With that, I set up <i>docker-compose</i> so I could ensure my ping utility
+  would run on restarts. In order to make sure it would use the
+  <i>wifi_ipvlan</i> network I set up earlier as well as a static ip address, I
+  used settings like this:
+</p>
+
+<pre><code>services:
+  ping:
+    ...
+    networks:
+      wifi_ipvlan:
+        ipv4_address: 192.168.1.208
+networks:
+  wifi_ipvlan:
+    external: true</code></pre>
+<p>
+  Note that apparently with
+  <a href="https://stackoverflow.com/questions/61831255/">higher versions</a> of
+  <i>docker-compose</i>, this may not work, but I'm using an old version.
+</p>
+
+<p>
+  With that set up, I was able get some data for pinging through my wifi
+  interface. The lighter color indicates the timeouts through the wifi
+  interface. The numbber of timeouts seem similar, which indicates my wifi
+  itself isn't having too many issues.
+</p>
+<div>
+  <img src="assets/ping-facebook-wifi.png" loading="lazy" />
+</div>
+
+<h2 id="ipvlan">IPvlan</h2>
+<p>
+  This seemed to work pretty well. I was able to connect from my Docker
+  container through my wifi interface. I was also able to access my Docker
+  container from other things on my local computer. Those were all things I had
+  expected. However, I was able to access my Docker container even on a
+  <b><i>different</i></b> computer on the network. I didn't expect that at all!
+</p>
+
+<p>
+  The part that confused me the most was how could a different computer on the
+  same network know to send packets addressed to <i>192.168.1.208</i> to my
+  Debian machine. Before diving in this, I hadn't really dug into the details of
+  how things like this work. To understand this, I had to figure out how a
+  computer decides where to send packets in local networks in general. For the
+  purposes of this blog, let's assume my computer is at <i>192.168.1.50</i> and
+  we're trying to send a packet to <i>192.168.1.208</i>.
+</p>
+
+<p>
+  First, it uses the subnet mask of my network (<i>255.255.255.0</i>), to
+  determine if the target is in the local network or not. A subnet mask consists
+  of 4 8-bit numbers and all the bits that are 0 are considered part of the same
+  network. Since my network's subnet mask has the final 8-bit number as 0, that
+  means all addresses that only differ in the final 8-bit number as considered
+  part of the same network. That would mean the range
+  (<i>192.168.1.0</i>-<i>192.168.1.255</i>). That is how my computer knows
+  <i>192.168.1.208</i> is in the same network.
+</p>
+
+<p>
+  Given an IP address, a computer has to find the MAC address associated with
+  that IP address. When the result isn't cached, it does this using
+  <a href="https://en.wikipedia.org/wiki/Address_Resolution_Protocol">ARP</a>.
+  This works by having my computer broadcast to every single other device on the
+  network with the destination of <i>192.168.1.255</i> asking for the MAC
+  address of <i>192.168.1.208</i>. Every other device will hear this broadcast,
+  but only the device that claims to be <i>192.168.1.208</i> will respond with
+  its MAC address.
+</p>
+
+<p>
+  Having set up <i>ipvlan</i>, when my Debian machine receives the ARP ping, it
+  then knows to respond with the MAC address of its wifi interface. My computer
+  then receives this and then it can send an
+  <a href="https://en.wikipedia.org/wiki/Ethernet_frame">Ethernet frame</a> with
+  the appropriate source and destination MAC addresses. My router upon receiving
+  the Ethernet frame would then see the destination MAC address and uses an
+  internal table that matches physical port to MAC address. The router is thus
+  able to forward it to my Debian machine. That's how my main machine was also
+  able to access the Docker container on a remote Debian machine.
+</p>
+
+<h2 id="references">References</h2>
+<ul>
+  <li>
+    <a
+      href="https://blog.oddbit.com/post/2018-03-12-using-docker-macvlan-networks/"
+      >Using Docker macvlan networks</a
+    >
+  </li>
+  <li>
+    <a href="https://hicu.be/macvlan-vs-ipvlan">Macvlan vs Ipvlan</a>
+  </li>
+  <li>
+    Docker docs:
+    <a href="https://docs.docker.com/network/ipvlan/">Use IPvlan networks</a>
+  </li>
+  <li>
+    Powercert videos:
+    <a href="https://www.youtube.com/watch?v=cn8Zxh9bPio"
+      >ARP Explained - Address Resolution Protocol</a
+    >,
+    <a href="https://www.youtube.com/watch?v=TIiQiw7fpsU"
+      >MAC Address Explained</a
+    >,
+    <a href="https://www.youtube.com/watch?v=s_Ntt6eTn94"
+      >Subnet Mask - Explained</a
+    >
+  </li>
+  <li>
+    Stackoverflow answers:
+    <a href="https://stackoverflow.com/questions/49600665/"
+      >Docker Macvlan network inside container is not reaching to its own
+      host</a
+    >,
+    <a href="https://stackoverflow.com/questions/61831255/"
+      >How to create a Docker macvlan with user defined IP and MAC address using
+      Compose</a
+    >
+  </li>
+</ul>
+
+<style>
+  #toc_container {
+    border: 1px solid #aaa;
+    display: table;
+    font-size: 85%;
+    margin-bottom: 1em;
+    padding: 10px;
+    width: auto;
+  }
+  .toc_title {
+    font-weight: 700;
+    text-align: center;
+  }
+</style>
