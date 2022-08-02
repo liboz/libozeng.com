@@ -111,9 +111,36 @@
   </figcaption>
 </figure>
 
-<p>
-  Viewing the standards themselves requires a subscription, but I found a some
+<figure>
+  <blockquote cite="https://superuser.com/questions/1113812">
+    <p>
+      Macvlans are not built to work on wireless interfaces. The reason is that
+      all APs will reject frames originating from a MAC address which did not
+      authenticate with them, while the whole point of macvlans is exactly to
+      provide new subinterfaces with their own MAC address, different from that
+      of the physical interface.
+    </p>
+    <p>...</p>
+    <p>
+      Incidentally, having an underlying wireless interface is just about the
+      only reasonable use case for ipvlans instead of macvlans. In all other
+      cases, just stick to macvlans.
+    </p>
+  </blockquote>
 
+  <figcaption>
+    —MariusMatutiae,
+    <cite
+      ><a href="https://superuser.com/questions/1113812"
+        >how to configure macvlan interface for getting the IP?</a
+      ></cite
+    >
+  </figcaption>
+</figure>
+
+<p>
+  Viewing the standards themselves requires a subscription, but I found
+  <a href="https://superuser.com/questions/1113812">some</a>
   <a href="https://ipwithease.com/macvlan-vs-ipvlan-understand-the-difference/"
     >other</a
   >
@@ -307,6 +334,9 @@ networks:
   </li>
   <li>
     Stackoverflow answers:
+    <a href="https://superuser.com/questions/1113812"
+      >how to configure macvlan interface for getting the IP?</a
+    >
     <a href="https://stackoverflow.com/questions/49600665/"
       >Docker Macvlan network inside container is not reaching to its own
       host</a
@@ -314,6 +344,10 @@ networks:
     <a href="https://stackoverflow.com/questions/61831255/"
       >How to create a Docker macvlan with user defined IP and MAC address using
       Compose</a
+    >
+    <a href="https://superuser.com/questions/1053099/"
+      >When a computer wants to send a IP packet to another computer in the same
+      network, how does it know the destination MAC address of that host?</a
     >
   </li>
 </ul>
