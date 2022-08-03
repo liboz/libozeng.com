@@ -25,7 +25,7 @@
   like <a href="google.com">google.com</a> and checking to see how many time
   out. For this purpose, I set up my own Debian box so I can have 24/7
   monitoring. I plot the number of timeouts in Grafana. The following is an
-  example of pings to <a href="facebook.com"></a>
+  example of pings to <a href="facebook.com">facebook.com</a>.
 </p>
 
 <div>
@@ -139,8 +139,7 @@
 </figure>
 
 <p>
-  Viewing the standards themselves requires a subscription, but I found
-  <a href="https://superuser.com/questions/1113812">some</a>
+  Viewing the standards themselves requires a subscription, but I found some
   <a href="https://ipwithease.com/macvlan-vs-ipvlan-understand-the-difference/"
     >other</a
   >
@@ -155,7 +154,7 @@
 </p>
 
 <p>
-  My router/DHCP server assigned IPs from the range of
+  My router/DHCP server assigns IPs from the range of
   <i>192.168.1.25</i>-<i>192.168.1.200</i> with a gateway at
   <i><i>192.168.1.1</i></i
   >. In order to avoid overlap, I picked the range <i>192.168.1.208/28</i>,
@@ -183,13 +182,13 @@ ip route add 192.168.1.208/28 dev wifi-shim
 
 <p>
   The other thing that wasn't mentioned in the Lars Kellogg-Stedman blog post
-  was how to make the settings persistent (in Debian) through restarts. I
-  initially thought I could just run my script through <i>crontab</i> (i.e.
-  <code>sudo crontab -e</code> and adding a line with
-  <code>@reboot path_to_my_script.sh</code>). This turned out not to be viable
-  because the <i>crontab</i> would run before the interface was discoverable. I
-  tried adding some minor amounts of sleep, but it required a lot more sleep
-  than I wanted (20s).
+  was how to make the settings persistent (in Debian) through restarts as each
+  Linux distribution is different. I initially thought I could just run my
+  script through <i>crontab</i> (i.e. <code>sudo crontab -e</code> and adding a
+  line with <code>@reboot path_to_my_script.sh</code>). This turned out not to
+  be viable because the <i>crontab</i> would run before the interface was
+  discoverable. I tried adding some minor amounts of sleep, but it required a
+  lot more sleep than I wanted (>20s).
 </p>
 
 <p>
@@ -221,10 +220,10 @@ iface wifi-shim inet manual
 </pre>
 
 <p>
-  With that, I set up <i>docker-compose</i> so I could ensure my ping utility
-  would run on restarts. In order to make sure it would use the
-  <i>wifi_ipvlan</i> network I set up earlier as well as a static ip address, I
-  used settings like this:
+  I also set up <i>docker-compose</i> so I could ensure my ping utility would
+  run on restarts. In order to make sure it would use the
+  <i>wifi_ipvlan</i> network I set up earlier as well as a static ip address
+  (192.168.1.208), I used settings like this:
 </p>
 
 <pre><code>services:
@@ -243,10 +242,10 @@ networks:
 </p>
 
 <p>
-  With that set up, I was able get some data for pinging through my wifi
-  interface. The lighter color indicates the timeouts through the wifi
-  interface. The numbber of timeouts seem similar, which indicates my wifi
-  itself isn't having too many issues.
+  With all this set up, I was finally able get some data for pinging through my
+  wifi interface. The lighter color indicates the timeouts through the wifi
+  interface. The number of timeouts seem similar, which indicates my wifi itself
+  isn't having too many issues.
 </p>
 <div>
   <img src="assets/ping-facebook-wifi.png" loading="lazy" />
@@ -254,10 +253,10 @@ networks:
 
 <h2 id="ipvlan">IPvlan</h2>
 <p>
-  This seemed to work pretty well. I was able to connect from my Docker
-  container through my wifi interface. I was also able to access my Docker
-  container from other things on my local computer. Those were all things I had
-  expected. However, I was able to access my Docker container even on a
+  This seemed to work pretty well. I was able to connect to the internet from my
+  Docker container through my wifi interface. I was also able to access my
+  Docker container from other things on my local computer. Those were all things
+  I had expected. However, I was able to access my Docker container even on a
   <b><i>different</i></b> computer on the network. I didn't expect that at all!
 </p>
 
@@ -265,26 +264,26 @@ networks:
   The part that confused me the most was how could a different computer on the
   same network know to send packets addressed to <i>192.168.1.208</i> to my
   Debian machine. Before diving in this, I hadn't really dug into the details of
-  how things like this work. To understand this, I had to figure out how a
-  computer decides where to send packets in local networks in general. For the
-  purposes of this blog, let's assume my computer is at <i>192.168.1.50</i> and
-  we're trying to send a packet to <i>192.168.1.208</i>.
+  how things like this work. I had to figure out how a computer decides where to
+  send packets in local networks in general. For the purposes of this blog,
+  let's assume my computer is at <i>192.168.1.50</i> and we're trying to send a
+  packet to <i>192.168.1.208</i>.
 </p>
 
 <p>
-  First, it uses the subnet mask of my network (<i>255.255.255.0</i>), to
-  determine if the target is in the local network or not. A subnet mask consists
-  of 4 8-bit numbers and all the bits that are 0 are considered part of the same
-  network. Since my network's subnet mask has the final 8-bit number as 0, that
-  means all addresses that only differ in the final 8-bit number as considered
-  part of the same network. That would mean the range
+  First, my computer uses the subnet mask of my network (<i>255.255.255.0</i>),
+  to determine if the target is in the local network or not. A subnet mask
+  consists of 4 8-bit numbers and all the bits that are 0 are considered part of
+  the same network. Since my network's subnet mask has the final 8-bit number as
+  0, that means all addresses that only differ in the final 8-bit number as
+  considered part of the same network. That would mean the range
   (<i>192.168.1.0</i>-<i>192.168.1.255</i>). That is how my computer knows
   <i>192.168.1.208</i> is in the same network.
 </p>
 
 <p>
-  Given an IP address, a computer has to find the MAC address associated with
-  that IP address. When the result isn't cached, it does this using
+  Given an IP address, my computer then has to find the MAC address associated
+  with that IP address. When the result isn't cached, it does this using
   <a href="https://en.wikipedia.org/wiki/Address_Resolution_Protocol">ARP</a>.
   This works by having my computer broadcast to every single other device on the
   network with the destination of <i>192.168.1.255</i> asking for the MAC
