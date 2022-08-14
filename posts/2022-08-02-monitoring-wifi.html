@@ -211,7 +211,8 @@ ip route add 192.168.1.208/28 dev wifi-shim
 </p>
 
 <pre><code>#ipvlan for docker connecting only to wifi
-auto wifi-shim #start up automatically
+#first line starts up automatically
+auto wifi-shim
 iface wifi-shim inet manual
     pre-up /sbin/ip link add wifi-shim link my_wifi_adapter type ipvlan mode l2
     up /sbin/ip addr add 192.168.1.222/32 dev wifi-shim
