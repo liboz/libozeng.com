@@ -1,0 +1,262 @@
+<blurb>Automating Docker Image Cleanup</blurb>
+<tag>linux</tag>
+<tag>docker</tag>
+
+<p>
+  In <a href="./2022-01-13-setting-up-k8s.html">a previous post</a>, I talked
+  about how I set up my own Docker registry. One issue with running your own
+  Docker registry is that you need to manage the storage and do things like
+  clean up old unused tags/images. There were a few gotchas to doing this
+  automatically so I thought I might write a short post about it.
+</p>
+
+<p>
+  First, the Docker registry by default doesn't allow deletion. One has to
+  either pass in an environment variable
+  <code>REGISTRY_STORAGE_DELETE_ENABLED=true</code> or use a config yaml file
+  with <code>storage.delete.enabled: true</code> (see
+  <a
+    href="https://stackoverflow.com/questions/32563780/why-cant-i-delete-a-layer-in-my-private-docker-registryv2"
+    >stackoverflow post</a
+  >). I opted for using a config file like this:
+</p>
+<pre><code>version: 0.1
+log:
+  fields:
+    service: registry
+storage:
+  cache:
+    blobdescriptor: inmemory
+  filesystem:
+    rootdirectory: /var/lib/registry
+  delete:
+    enabled: true # allow deletes
+  maintenance:
+    readonly:
+      enabled: false # enable readonly mode before garbage collections
+http:
+  addr: :5000
+  headers:
+    X-Content-Type-Options: [nosniff]
+health:
+  storagedriver:
+    enabled: true
+    interval: 10s
+    threshold: 3</code></pre>
+
+<p>I then change my docker-compose.yaml to add a volume:</p>
+
+<pre><code>volumes:
+      - ./registry-config.yaml:/etc/docker/registry/config.yml</code></pre>
+
+<p>
+  Next, I found a Docker image of a script that would delete old tags of images.
+  I used
+  <a href="https://hub.docker.com/r/anoxis/registry-cli">anoxis/registry-cli</a>
+  (<a href="https://github.com/andrey-pohilko/registry-cli">Github</a>) with the
+  following flags:
+  <code
+    >./registry.py -l userName:password -r registry_url --delete --num 15</code
+  >. It work pretty much exactly the way I wanted!
+</p>
+
+<p>
+  Lastly, I found out that the <i><b>DELETE</b></i> only soft deletes an image.
+  It would only be really deleted after running a garbage collection. The
+  registry image comes with a tool to run garbage collection so we just need to
+  run that command. We can script that command and force a garbage collection.
+  Furthermore, during the garbage collection, we should prevent writes, which
+  could cause issues. That's why I also have the
+  <code>storage.maintenance.readonly.enabled</code> option. I first change that
+  to enabled, reboot my server, run the garbage collection, change it back to
+  disabled and reboot server again.
+</p>
+
+That results this script:
+<pre><code>#!/bin/bash
+set -e
+
+cd directory_with_file
+echo "enabling read only mode for garbage collection"
+git checkout registry-config.yaml
+sed -i 's/enabled: false # enable readonly mode before garbage collections/enabled: true # enable readonly mode before garbage collections/' registry-config.yaml
+docker-compose stop registry
+docker-compose up -d registry
+echo 'starting garbage collection'
+docker-compose exec -T registry bin/registry garbage-collect --delete-untagged /etc/docker/registry/config.yml
+echo 'finished garbage collection. re-enabling writes to the registry'
+git checkout registry-config.yaml
+docker-compose stop registry
+docker-compose up -d registry</code></pre>
+
+<p>
+  Okay, this all looks pretty good. Now to do it automatically, I used my
+  Kubernetes cluster's
+  <a href="https://kubernetes.io/docs/concepts/workloads/controllers/cron-jobs/"
+    >CronJob</a
+  >
+  feature as well as linux's default crontab feature. On my box with the
+  self-hosted Docker registry, I set up the following crontab to run at 4:27AM
+  every day:
+</p>
+
+<pre><code>27 4 * * * /directory_with_file/garbage_collect_docker_images.sh >> /var/log/gc_docker.log 2>&1</code></pre>
+
+<p>
+  This redirects all output of the previous script to a file at
+  <code>/var/log/gc_docker.log</code>. Next, I set up a Kubernetes cronjob to
+  run the <code>anoxis/registry-cli</code> image like this:
+</p>
+
+<details>
+  <summary>See/Hide Yaml Configuration</summary>
+  <pre><code>---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: delete-old-images-docker-registry
+  namespace: cron
+spec:
+  schedule: "0 4 * * *" # every day at 4am
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: delete-old-images-docker-registry
+              image: anoxis/registry-cli
+              command:
+                [
+                  "./registry.py",
+                  "-l",
+                  "userName:password",
+                  "-r",
+                  "registry_url",
+                  "--delete",
+                  "--num",
+                  "15",
+                ]
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 50Mi
+                limits:
+                  cpu: 300m
+                  memory: 300Mi
+          restartPolicy: OnFailure
+      backoffLimit: 3</code></pre>
+</details>
+
+<p>
+  Great! Now the last thing I want is to be able to pick up the logs from the
+  crontab I set up earlier so that I can see them in Kubernetes for easier
+  monitoring. I have a k3s agent on that server so I can also set up a CronJob
+  to simply read the logs, clear them, and exit. Then my promtail agent can read
+  the logs from the pod and store them for easier access. That config looks like
+  thus:
+</p>
+
+<details>
+  <summary>See/Hide Yaml Configuration</summary>
+  <pre><code>---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: read-crontab-log
+  namespace: cron
+spec:
+  schedule: "0 5 * * *" # every day at 5am, cron job should run at 4:27
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: read-crontab-log
+              image: busybox:1.35
+              command:
+                ["/bin/sh", "-c", "cat /gc_docker.log; >| /gc_docker.log"]
+                # >| replaces the file with an empty file
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 10Mi
+                limits:
+                  cpu: 10m
+                  memory: 10Mi
+              volumeMounts:
+                - name: log-volume
+                  mountPath: /gc_docker.log
+          restartPolicy: OnFailure
+          volumes:
+            - name: log-volume
+              hostPath:
+                path: /var/log/gc_docker.log
+                type: File
+      backoffLimit: 3</code></pre>
+</details>
+
+<p>
+  Thanks to this setup, I went from 12GB of storage used for the Docker registry
+  to 3GB and I can feel confident that from now on, I'll be able to maintain a
+  low storage usage.
+</p>
+
+<p>
+  One other minor note: The <i><b>DELETE</b></i> API provided by the registry
+  only allows for the deletion of manifest, not tags. What this means for us
+  that is even if we use the API to delete all manifests associated with a tag,
+  that tag will still show up in the <i>catalog</i> API for gets. In order to
+  delete it from the catalog, you have to delete it manually from the disk like
+  thus:
+</p>
+
+<code>rm -rf data/docker/registry/v2/repositories/repository_name</code>
+
+<p>
+  Only then will the repository be properly cleaned up from the
+  <i>catalog</i> API. Doing this without manual deletion from disk be possible
+  in the SoonTM
+  <a
+    href="https://github.com/distribution/distribution/pull/3427#issuecomment-1031336035"
+    >upcoming 3.x</a
+  >
+  version of the repository. But until then, this appears to be the
+  <a
+    href="https://stackoverflow.com/questions/43666910/remove-docker-repository-on-remote-docker-registry"
+    >only</a
+  >
+  <a href="https://blog.bianxi.com/2021/11/06/clean-up-docker-registry/">way</a
+  >.
+</p>
+
+<h2 id="references">References</h2>
+<ul>
+  <li>
+    <a href="https://docs.docker.com/registry/garbage-collection/"
+      >Docker docs - Garbage collection</a
+    >
+  </li>
+</ul>
+
+<style>
+  details {
+    border: 1px solid #aaa;
+    border-radius: 4px;
+    padding: 0.5em 0.5em 0;
+  }
+
+  summary {
+    font-weight: bold;
+    margin: -0.5em -0.5em 0;
+    padding: 0.5em;
+  }
+
+  details[open] {
+    padding: 0.5em;
+  }
+
+  details[open] summary {
+    border-bottom: 1px solid #aaa;
+    margin-bottom: 0.5em;
+  }
+</style>
