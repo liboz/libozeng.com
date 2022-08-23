@@ -1,0 +1,151 @@
+<blurb>Automating Docker Image Cleanup</blurb>
+<tag>linux</tag>
+<tag>networking</tag>
+
+<p>
+  Previously in
+  <a href="./2022-08-02-monitoring-wifi.html"
+    >my post about monitoring my home wifi</a
+  >, I described using IPvlan to create an IP address for a docker image that
+  was accessible throughout my network. One downside I noticed was that when I
+  was <code>ssh</code>-ing into my Debian box, typing and inputting commands
+  would become significantly laggier.
+</p>
+
+<p>
+  I initially just dealt with the slowlness, but I finally got around to
+  investigating it. After a number of missteps, I eventually came to the
+  conclusion I needed to run the
+  <code>arp -a</code> command on my main Windows machine. I found out that
+  Debian box's Ethernet interface's IP (let's say its <i>192.168.1.59</i>) had
+  the Debian box's Wifi interface's MAC address listed in the arp cache. So, I
+  did the sensible thing and cleared my cache and forced another arping. Running
+  the command again resulted in the Ethernet interface (<i>192.168.1.59</i>)
+  having the Wifi interface's MAC address.
+</p>
+
+<p>
+  By sending out manual ARP-Pings requesting the MAC address of
+  <i>192.168.1.59</i>, I noticed that I got 3 responses for each ping I sent
+  out. Two of them having the Wifi interface's MAC address and one with the
+  Ethernet interface's MAC address. Googling around, I found out that this is
+  called
+  <a href="http://linux-ip.net/html/ether-arp.html#ether-arp-flux">ARP Flux</a>.
+</p>
+
+<p>
+  Linux by default responds to the ARP ping to a known interface from all
+  possible interfaces with the MAC address of the responding interface. Since my
+  Debian box was connected via 3 interfaces (Ethernet, Wifi, Docker), it would
+  only respond 3 times with only one response having the actual Ethernet MAC
+  address. This would cause other machines to choose to connect via the slower
+  Wifi interface and thus my <code>ssh</code> had much more latency.
+</p>
+
+<p>
+  There are at least
+  <a
+    href="http://kb.linuxvirtualserver.org/wiki/Using_arp_announce/arp_ignore_to_disable_ARP"
+    >two</a
+  >
+  <a href="http://linux-ip.net/html/ether-arp.html#ether-arp-flux-arpfilter"
+    >solutions</a
+  >
+  to this. I chose to put
+</p>
+<pre><code>net.ipv4.conf.default.arp_filter=1
+net.ipv4.conf.all.arp_filter=1</code></pre>
+
+<p>
+  in my <code>/etc/sysctl.conf</code> file. Others preferred to put this instead
+</p>
+
+<pre><code>net.ipv4.conf.eth0.arp_ignore = 1
+net.ipv4.conf.eth0.arp_announce = 2</code></pre>
+
+<p>
+  I suppose I trusted a book with the name of
+  <i>Guide to IP Layer Network Administration with Linux</i> than other
+  websites, but it's likely both work. Also the
+  <a href="https://www.kernel.org/doc/Documentation/networking/ip-sysctl.txt"
+    >documentation</a
+  >
+  for <code>arp_filter</code> seemed to cleanly express what I wanted:
+</p>
+
+<blockquote>
+  1 - Allows you to have multiple network interfaces on the same subnet, and
+  have the ARPs for each interface be answered based on whether or not the
+  kernel would route a packet from the ARP’d IP out that interface (therefore
+  you must use source based routing for this to work). In other words it allows
+  control of which cards (usually 1) will respond to an arp request.
+</blockquote>
+
+<p>
+  The setting seemed to fix my lagginess with <code>ssh</code>. I confirmed by
+  manually sending ARP Pings that I would only get a single reply to the correct
+  Ethernet interface's MAC Address. Problem solved!
+</p>
+
+<h2 id="references">References</h2>
+<ul>
+  <li>
+    <a href="http://linux-ip.net/html/ether-arp.html#ether-arp-flux"
+      >Guide to IP Layer Network Administration with Linux, Chapter 2.1. Address
+      Resolution Protocol (ARP)</a
+    >
+  </li>
+  <li>
+    <a
+      href="https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/6/html/virtualization_tuning_and_optimization_guide/sect-virtualization_tuning_optimization_guide-networking-general_tips"
+      >Red Hat Enterprise Linux, Virtualization Tuning and Optimization Guide,
+      5.2. Network Tuning Tips
+    </a>
+  </li>
+  <li>
+    <a
+      href="https://netbeez.net/blog/avoiding-arp-flux-in-multi-interface-linux-hosts/"
+      >Avoiding ARP Flux in Multi-Interface Linux Hosts</a
+    >
+  </li>
+  <li>
+    <a
+      href="http://kb.linuxvirtualserver.org/wiki/Using_arp_announce/arp_ignore_to_disable_ARP"
+      >Using arp announce/arp ignore to disable ARP</a
+    >
+  </li>
+  <li>
+    <a
+      href="https://serverfault.com/questions/834512/why-does-linux-answer-to-arp-on-incorrect-interfaces"
+      >Serverfault - Why does Linux answer to ARP on incorrect interfaces?</a
+    >
+  </li>
+  <li>
+    <a href="https://shradha741.medium.com/the-arp-flux-problem-3a4c92157f79"
+      >The ARP flux problem</a
+    >
+  </li>
+</ul>
+
+<style>
+  details {
+    border: 1px solid #aaa;
+    border-radius: 4px;
+    padding: 0.5em 0.5em 0;
+  }
+
+  summary {
+    font-weight: bold;
+    margin: -0.5em -0.5em 0;
+    padding: 0.5em;
+  }
+
+  details[open] {
+    padding: 0.5em;
+  }
+
+  details[open] summary {
+    border-bottom: 1px solid #aaa;
+    margin-bottom: 0.5em;
+  }
+</style>
