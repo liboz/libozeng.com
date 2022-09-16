@@ -1,0 +1,318 @@
+<blurb>Reachitecting my Homelab with WireGuard</blurb>
+<tag>linux</tag>
+<tag>networking</tag>
+<tag>wireguard</tag>
+<tag>kubernetes</tag>
+
+<div id="toc_container">
+  <p class="toc_title">Contents</p>
+  <ul>
+    <li>
+      <a href="#intro">Introduction</a>
+    </li>
+    <li>
+      <a href="#wireguard-network">Wireguard Network</a>
+    </li>
+    <li>
+      <a href="#other-setup">Other Setup</a>
+    </li>
+    <li>
+      <a href="#cicd">Setting up CI/CD</a>
+    </li>
+    <li>
+      <a href="#concluding">Concluding Thoughts</a>
+    </li>
+    <li>
+      <a href="#references">References/Inspiration</a>
+    </li>
+  </ul>
+</div>
+
+<h2 id="intro">Introduction</h2>
+<p>
+  Earlier this year, I set up
+  <a href="./2022-01-13-setting-up-k8s.html">set up a Kubernetes cluster</a> for
+  my own projects. Since then, I also ended up buying an old Lenovo Thinkcentre
+  M700 for my own home, partially to have a dedicated machine to monitor my ping
+  situation. I installed <a href="https://k3s.io/">k3s</a> on it to help manage
+  my infrastructure more easily and to play around with k8s a bit more.
+</p>
+
+<p>
+  With some of the changes brought about by
+  <a href="./2022-08-02-monitoring-wifi.html">my wifi monitoring setup</a>, the
+  overall picture looked something like this in terms of ping monitoring:
+</p>
+
+<figure id="old-architecture-figure">
+  <img
+    id="old-architecture"
+    src="./assets/original_architecture_k8s.svg"
+    alt="Original Architecture Diagram"
+    loading="lazy"
+  />
+  <figcaption>
+    Generated via <a href="https://github.com/mingrammer/diagrams">diagrams</a>
+  </figcaption>
+</figure>
+
+<p>
+  I eventually realized that I don't really need to pay extra for the
+  DigitalOcean based managed k8s setup. I could set up a k3s agent node on a DO
+  droplet and use the DO droplet as the frontend server to my homelab Lenovo.
+</p>
+
+<h2 id="wireguard-network">WireGuard Network</h2>
+<p>
+  However, I didn't really want to expose my Home IP directly to the internet so
+  I had to think about how I could set up a 2-way connection between my DO
+  droplet and my Homelab. I had already been using
+  <a href="https://www.wireguard.com/">WireGuard</a> mostly as an easy to set up
+  VPN. For ease of setup, I was using the
+  <a href="https://github.com/linuxserver/docker-wireguard">docker-wireguard</a>
+  in a Docker container. It was really easy to set up and I could easily create
+  droplets/VMs to connect to with my phone/PC.
+</p>
+
+<p>
+  Unfortunately, attempting to use this with k3s resulted in some issues. The
+  main issue was that the docker container doesn't create a network interface in
+  the host. That resulted in me having to painfully manually set up routes that
+  would route through the docker container. However, even with the manual route
+  set up, k3s was unable to figure out the topology of the network from the side
+  of my homelab. I even manually input the wireguard IP address of my other
+  node, but flannel was unable to route to pods/services on my DO node. That
+  meant that pods on my homelab were unable to connect to any pods in my
+  droplet. There were also errors like
+  <a href="https://github.com/kubernetes/kubernetes/issues/54337">this</a>.
+</p>
+
+<p>
+  Because of that, I resorted to manually setting up my wireguard network. I
+  mostly followede the
+  <a href="https://www.wireguard.com/quickstart/">documentation</a> and set up
+  <i>wg-quick</i>. So it wasn't too bad. Once I did that, I ran
+</p>
+
+<pre><code
+  >curl -sfL https://get.k3s.io | K3S_URL=homelab_wireguard_ip:6443 K3S_TOKEN=node_token sh -s - agent --node-ip do_droplet_wireguard_ip --flannel-iface=wg0 --node-label network=do-network
+</code></pre>
+
+<p>
+  Note that previously, I also set up my server node to use
+  <code>--flannel-iface=wg0</code> but I didn't change my flannel backend. After
+  all this, my droplet was able to function as a k3s node. I honestly should
+  have just tried this directly instead of painfully messing with ip routes.
+</p>
+
+<h2 id="other-setup">Other setup</h2>
+<p>
+  With WireGuard up, the other main thing I had to do was make sure certain pods
+  always scheduled on my DO droplet. The reason was that I wanted to ensure my
+  ping monitoring situation was using the DO droplet and not my local network.
+  In order to do this, I used
+  <a
+    href="https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodeselector"
+    ><i>nodeSelector</i></a
+  >. Then, I labeled my DO droplet as <code>network=do-network</code> and would
+  add that to my deployment's yaml file. I considered using a
+  <a href="https://kubernetes.io/docs/concepts/workloads/controllers/daemonset/"
+    >DaemonSet</a
+  >, but decided that doing that would be a minor annoyance if I ever installed
+  more nodes (maybe I'll buy more homelab equipment).
+</p>
+
+<p>
+  Lastly, because I was already serving traffic on ports 80/443 via Caddy on my
+  droplet for my Docker registry, I set my nginx ingress to use a different
+  port. Then, I changed my Caddy instance to reverse proxy to nginx. The
+  downside of this method is that for direct access to my homelab, I could no
+  longer use just type in the IP address of my homelab from my desktop. To solve
+  this, I also installed a Caddy reverse proxy on my homelab to do the same
+  reverse proxy that my DO Droplet's Caddy is doing.
+</p>
+
+<p>With all that work, my overall architecture became something like this:</p>
+
+<figure>
+  <img
+    id="new-architecture"
+    src="./assets/simplified_architecture.svg"
+    alt="New Architecture Diagram"
+    loading="lazy"
+  />
+  <figcaption>
+    Generated via <a href="https://github.com/mingrammer/diagrams">diagrams</a>
+  </figcaption>
+</figure>
+
+<h2 id="cicd">Setting up CI/CD</h2>
+<p>
+  Like
+  <a href="./2022-01-13-setting-up-k8s.html"
+    >when I set my own cluster for the first time</a
+  >, I consider having CI/CD very important. Previously, I set up various
+  <code>ConfigMap</code>s in my k8s cluster with the git commit SHA of the
+  latest image. In my Github Actions, I would acquire credentials to connect to
+  my cluster through the <code>doctl</code> CLI tool and update the
+  <code>ConfigMap</code>s and then run <code>kubectl -f apply</code> on my
+  config files. This would update my cluster auttomatically.
+</p>
+
+<p>
+  However, my homelab contains the server node and is not exposed to the public
+  internet. Because of this, I can't easily use <code>kubectl</code> with passed
+  in credentials and modify the server state. My previous process of updating my
+  homelab's k3s was manually running an update script which checked the managed
+  k8s cluster's <code>ConfigMap</code>s and ran <code>kubectl -f apply</code> on
+  my config files.
+</p>
+
+<p>
+  My first goal was to make it so that Github Actions is able update my
+  <code>ConfigMap</code>s. To achieve this, I created a service
+  (<i>config-map-updater</i>) that would modify the k8s APIs directly within the
+  k3s cluster. It has permission to <i>get/update</i> <code>ConfigMap</code>s.
+  <i>config-map-updater</i> provides an API endpoint to do the required update.
+  This was a good opportunity to try out
+  <a href="https://connect.build/docs/introduction">Connect</a>, a way to create
+  protobuf RPC services easily. RPCs are nicer than having the figure out the
+  right REST verb. I then exposed this RPC service via ingress and my Caddy
+  reverse proxy. With this, Github Actions was able to use the API provided by
+  <i>config-map-updater</i> to update the appropriate
+  <code>ConfigMap</code> (after I created a client with the Connect library). I
+  also implemented auth so that hopefully only I can update
+  <code>ConfigMap</code>s. That solves the initial problem of updating my
+  <code>ConfigMap</code>s.
+</p>
+
+<p>
+  Next up is figuring how I could update all my various deployments. Even though
+  I had a preexisting script file, I realized that running it within a k8s pod
+  was going to be painful in terms of setting up the correct
+  environment/permissions. So, I opted to create a local service
+  (<i>k3s-updater</i>) on my homelab that would run my preexisting update
+  script.
+  <i>k3s-updater</i> would run as my local user and upon receiving an update
+  RPC, it then executes the aforementioned script file. To prevent a concurrent
+  update from running the script multiple times, I added a mutex. The update RPC
+  is called by the <i>config-map-updater</i> created previously. Thus, Github
+  Actions could call the <i>config-map-updater</i> and
+  <i>config-map-updater</i> would then be able to call <i>k3s-updater</i>.
+</p>
+
+<p>
+  Lastly, I set up a
+  <a
+    href="https://kubernetes.io/docs/concepts/services-networking/service/#services-without-selectors"
+    >Service without selectors</a
+  >
+  for my <i>k3s-updater</i> service. This allows pods from inside the k8s
+  cluster to easily connect to it even from the DO droplet by simply connecting
+  to <i>http://k3s-updater</i>. This helps with the ergnomics of the setup.
+</p>
+
+<p>
+  Thanks to all this, I can now trigger updates from Github Actions as part of
+  CI/CD.
+</p>
+
+<h2 id="concluding">Concluding Thoughts</h2>
+<p>
+  I am now able to use the internet to connect to my homelab through my droplet
+  and WireGuard. I can now host all my personal projects in my homelab and save
+  the cost of the managed k8s cluster (especially with the recent price
+  increases for DigitalOcean). Furthermore, I was able to have an overall more
+  coherent setup instead of having two different k8s clusters.
+</p>
+
+<p>
+  Because I have a mere 10ms roundtrip ping to my droplet, viewing pages from
+  the internet is quite speedy. However, the other day when DigitalOcean's
+  network was having some slowdowns and my ping went to 100ms, I definitely
+  noticed the lag (some css files took 3s to load). Hopefully that's not the
+  norm though.
+</p>
+
+<h2 id="references">References</h2>
+<ul>
+  <li>
+    <a href="https://www.wireguard.com/quickstart/">WireGuard - Quick Start</a>
+  </li>
+  <li>
+    <a
+      href="https://www.reddit.com/r/selfhosted/comments/mu6et4/has_anyone_setup_k3s_over_wireguard_is_it_possible/"
+      >Has anyone setup k3s over wireguard? Is it possible?
+    </a>
+  </li>
+  <li>
+    <a
+      href="https://itnext.io/how-to-deploy-a-single-kubernetes-cluster-across-multiple-clouds-using-k3s-and-wireguard-a5ae176a6e81"
+      >How to deploy a single Kubernetes cluster across multiple clouds using
+      k3s and WireGuard</a
+    >
+  </li>
+  <li>
+    <a href="https://scvalex.net/posts/64/"
+      >64. Accessing Kubernetes services through Wireguard</a
+    >
+  </li>
+  <li>
+    <a href="https://connect.build/docs/introduction">Connect - Introduction</a>
+  </li>
+</ul>
+
+<style>
+  #toc_container {
+    border: 1px solid #aaa;
+    display: table;
+    font-size: 85%;
+    margin-bottom: 1em;
+    padding: 10px;
+    width: auto;
+  }
+  .toc_title {
+    font-weight: 700;
+    text-align: center;
+  }
+  figcaption {
+    font-style: italic;
+    text-align: center;
+  }
+
+  figure {
+    margin-top: 0px;
+    margin-left: 0px;
+    margin-right: 0px;
+  }
+
+  #old-architecture-figure {
+    display: flex;
+    flex-direction: column;
+  }
+
+  #old-architecture {
+    margin-bottom: 0px;
+  }
+
+  @media only screen and (min-width: 600px) {
+    /* For desktop: */
+    #old-architecture {
+      height: 800px;
+    }
+  }
+
+  #new-architecture {
+    width: 1300px;
+    max-width: none;
+    margin-bottom: 0px;
+    overflow: scroll;
+  }
+
+  @media only screen and (min-width: 1300px) {
+    /* For desktop: */
+    #new-architecture {
+      margin-left: -200px;
+    }
+  }
+</style>
