@@ -1,0 +1,383 @@
+<blurb>日本で使えるVPSをベンチマークしてみました</blurb>
+<tag>benchmark</tag>
+
+<div id="toc_container">
+  <p class="toc_title">目次</p>
+  <ul>
+    <li>
+      <a href="#intro">概要</a>
+    </li>
+
+    <li>
+      <a href="#candidates">候補</a>
+    </li>
+    <li>
+      <a href="#setup">設定</a>
+    </li>
+    <li>
+      <a href="#results">結果</a>
+    </li>
+    <li>
+      <a href="#concluding">まとめ</a>
+    </li>
+    <li>
+      <a href="#references">資料</a>
+    </li>
+  </ul>
+</div>
+
+<h2 id="intro">概要</h2>
+<p>
+  中学時代からvpsをいじってきました。零細企業のbbsを作った他に社会人になってからAWSやGCPの経験もあります。
+  それでも最近趣味でKubernetesをいじっている時、DigitalOceanばかり使っています。
+  その理由はDigitalOceanが安くて値段が固定されていることに加えて、操作がしやすいことがあげられます。
+  でも残念ながらDigitalOceanは現在<a
+    href="https://ideas.digitalocean.com/infrastructure/p/datacenter-in-japan"
+    >日本サーバー</a
+  >がないです。そのため、日本で簡単に借りられるサーバーの中で何がいいのか？を知りたくなりました。
+  この調査は2022年の10月くらいに始めました。
+</p>
+
+<p>ほしいスペックから考えてみましょう。</p>
+
+<table>
+  <tr>
+    <td>値段</td>
+    <td>メモリー</td>
+    <td>ディスク容量</td>
+    <td>帯域</td>
+  </tr>
+  <tr>
+    <td>
+      10ドル以下（今のレートでは1400円以下、そして割引の値段を考えないようにします）
+    </td>
+    <td>1GB以上</td>
+    <td>20GB以上</td>
+    <td>月に20GB以上</td>
+  </tr>
+</table>
+
+<p>
+  Kubernetesは、普段毎秒4KBくらいの帯域を使っています。そのせいで月に4KB/秒*3600秒/時間*720時間/月＝10GBくらいの帯域が必須です。
+  20GBが条件である理由は万が一のために。
+  それより大切なのは、<b>ネット接続安定性です</b>。CPU、ディスク、ネット接続などの速さは速いほど望ましいですが、
+  それでなくても問題ありません。
+</p>
+
+<h2 id="candidates">候補</h2>
+<p>
+  まず世界規模で日本でのサーバーがあるVPSから探しました。vps業界では<a
+    href="https://www.linode.com/"
+    >linode</a
+  >と<a href="https://www.vultr.com/">vultr</a
+  >がそれなりに有名ですね。両方10ドル以下のプランは一つしかありません。
+  英語のみ対応しています。そして世界規模であるのおかげでアメリカでもウェブ画面がサクサク動きました。
+  CDNやアメリカにあるサーバーの力に違いないです。両方は無料クーポンがありますので、とっても便利。
+</p>
+
+<p>
+  そして有名なクラウドサービスのAWS, GCP,
+  Azureは様々な理由で全項目調査していなかったです。
+
+  <details>
+    <summary>Azureを除外する理由</summary>
+    一番安いVMはB1sです。それだけで月に9.93ドルなので、固定IPアドレス（月に2.5ドルくらい）を買うと予算を超えます。帯域もお金かかります。除外します。
+  </details>
+
+  <details>
+    <summary>GCPを除外する理由</summary>
+    前の仕事ではGCPしか使われていなかったおかげで、それなりに詳しいです。しかし、残念ながら使えません。
+    7.84ドルのe2-microがスペック的には条件が合うが、帯域でかなり課金する必要があります。
+    GB毎に0.12ドルです。すなわち条件である20GB＝月に2.4ドルです。もう予算超えましたので、除外しなければなりません。
+    固定IPアドレスも課金します。高いですね。
+  </details>
+
+  <details>
+    <summary>AWSの調査が途中から初めて、情報がかけてる理由</summary>
+    <p>
+      最初に調査しようと思った時、AWSを外してしまいました。理由は簡単です。偏見の目で見て、きっと高いだろうなと思い込んでしまいました。
+      でもこのブログの原稿を書こうとした時、具体的な値段を確認し、実際に意外と条件が合いそうだとわかってしまいました。
+    </p>
+    <p>
+      AWSはGCPと違って、100GBの帯域を無料で使えます。私のテストでは月に10TBは使うかもしれないせいで、GB毎に0.08-0.12ドルで1200ドル（15万円）もかかるんですね。
+      それに無料クーポンありません。そのせいで、今回の調査ではダウンロードとアップロードの速度が確認していませんけど、他の項目を調査してみました。
+    </p>
+  </details>
+</p>
+
+<p>
+  最後は日本国内のVPSを探しました。<a
+    href="https://blog-bootcamp.jp/start/wordpress-server-vps/"
+    >このブログ</a
+  >から契約期間が一ヶ月以下で初期費用がない会社に申し込んでみました。
+  ツテで日本人の決済情報とかがあるので利用できると思いました。
+</p>
+
+<p>
+  でも、結局そう簡単ではありません。<a href="https://www.xserver.ne.jp/"
+    >xserver</a
+  >、<a href="https://www.conoha.jp/">ConoHa</a>、<a
+    href="https://www.kagoya.jp/cloud/vps/"
+    >カゴヤ クラウド</a
+  >、<a href="https://web.arena.ne.jp/indigo/">WebARENA Indigo</a
+  >を試してみました。日本の情報があったとはいえ、WebARENA
+  Indigoは申し込めませんでした。IPアドレスがアメリカからではないか。
+</p>
+
+<p>
+  日本のVPSは海外への対応が弱いせいか、管理画面が異常に遅く感じました。
+  特にConoHaはその感じが強かったです。kagoyaだけはメールで申し込みの確認がありました。今の時代はそういう事をする方が珍しいですね。
+  個人的な感想ですけど、日本VPSの管理画面では出来る機能が少ないと思います。
+  ファイアウォールでportを開けるのはkagoyaしかできません。今の時代なのにxserverではip6を<a
+    href="https://fiveworks.jp/%E3%80%90%E5%A4%B1%E6%95%97%E7%B7%A8%E3%80%91%E3%81%86%E3%81%A1%E3%81%AE%E3%83%96%E3%83%AD%E3%82%B0%E3%82%92ipv6%E5%AF%BE%E5%BF%9C%E3%81%AB%E3%81%97%E3%81%A6%E3%81%BF%E3%82%8B_9540/"
+    >使えない</a
+  >なんてびっくりしました。
+</p>
+
+<h2 id="setup">設定</h2>
+<p></p>
+
+<table>
+  <tr>
+    <td>VPS</td>
+    <td>月額</td>
+    <td>コア数</td>
+    <td>メモリー</td>
+    <td>ディスク容量</td>
+    <td>帯域</td>
+    <td>備考</td>
+  </tr>
+  <tr>
+    <td>vultr</td>
+    <td>6ドル（約880円）</td>
+    <td>1</td>
+    <td>1GB</td>
+    <td>25GB</td>
+    <td>2TB</td>
+    <td>AMD</td>
+  </tr>
+  <tr>
+    <td>linode</td>
+    <td>5ドル（約730円）</td>
+    <td>1</td>
+    <td>1GB</td>
+    <td>25GB</td>
+    <td>1TB</td>
+    <td>Nanode 1 GB</td>
+  </tr>
+  <tr>
+    <td>aws</td>
+    <td>8.91ドル（約1300円）</td>
+    <td>2</td>
+    <td>1GB</td>
+    <td>8GB</td>
+    <td>100GB</td>
+    <td>t3a.micro, 10GBのEBSも追加できる</td>
+  </tr>
+  <tr>
+    <td>ConoHa</td>
+    <td>968円（約6.6ドル）</td>
+    <td>2</td>
+    <td>1GB</td>
+    <td>100GB</td>
+    <td>無制限（速度制限は100Mbps）</td>
+    <td></td>
+  </tr>
+  <tr>
+    <td>kagoya</td>
+    <td>979円（約6.7ドル）</td>
+    <td>3</td>
+    <td>2GB</td>
+    <td>30GB</td>
+    <td>無制限（速度制限あり）</td>
+    <td>
+      関西にある。debianがない。初期設定はなぜかvirtioがなくて、ディスクI/Oが遅かったです。自分で<a
+        href="https://www.linuxquestions.org/questions/debian-26/%5Bsolved%5D-how-do-i-use-virtio-drivers-in-debian-in-a-kvm-virtual-machine-4175442186/"
+        >導入してみたら</a
+      >、ディスクI/Oが350MB/sから740MB/sくらいになっていました。最初から導入してくれない理由はなぜなんでしょうか。
+    </td>
+  </tr>
+  <tr>
+    <td>xserver</td>
+    <td>1150円（約7.9ドル）</td>
+    <td>3</td>
+    <td>2GB</td>
+    <td>50GB</td>
+    <td>無制限</td>
+    <td>関西にある。ip6ない</td>
+  </tr>
+</table>
+
+<p>
+  値段とスペックから見たら、xserverが断然によさそうですね。
+  でも、逆にそんなによさそうに書いてあるからこそ少々怪しいと思います。
+  多くのユーザーが同時に利用すると、公式で発表されているスペックが出ないかもしれません。
+  夜のいわゆるゴールデンタイムで問題が発生するのでしょうか。
+  と事前に推測しました。
+</p>
+
+<p>
+  計測スコアのコードは<a href="https://github.com/liboz/benchmark-japan-vps"
+    >Github</a
+  >にあります。ping、ディスクI/O、Geekbench、ダウンロードとアップロード速度が測定項目です。
+  一時間ごとに、自動的に実行するように設定しました。詳しくはGithubのリポジトリにあります。
+</p>
+
+<p>観察した期間は2022年の９月から10月の一ヶ月間でした。</p>
+
+<h2 id="results">結果</h2>
+
+<p>まず結果を図として表示しましょう。</p>
+
+<select id="primarySelect" onchange="changeChart()" autocomplete="off">
+  <option value="ping_test_results,average_ping">Ping（平均）</option>
+  <option value="ping_test_results,minimum_ping">Ping（最低）</option>
+  <option value="ping_test_results,maximum_ping">Ping（最高）</option>
+  <option value="io_speed">ディスクI/O</option>
+  <option value="single_core_geekbench">Geekbench シングルコア</option>
+  <option value="multi_core_geekbench">Geekbench マルチコア</option>
+  <option value="speed_test_results,download_speed">ダウンロード</option>
+  <option value="speed_test_results,upload_speed">アップロード</option>
+</select>
+
+<select id="siteSelect" onchange="changeChart()" autocomplete="off">
+  <option value="google.com">google.com</option>
+  <option value="amazon.co.jp">amazon.co.jp</option>
+  <option value="yahoo.co.jp">yahoo.co.jp</option>
+  <option value="youtube.com">youtube.com</option>
+</select>
+
+<select
+  id="locationSelect"
+  onchange="changeChart()"
+  autocomplete="off"
+  style="display: none"
+>
+  <option value="Tokyo">Tokyo</option>
+  <option value="Amsterdam">Amsterdam</option>
+  <option value="Los Angeles">Los Angeles</option>
+  <option value="Shanghai">Shanghai</option>
+  <option value="Singapore">Singapore</option>
+</select>
+<br />
+
+<canvas
+  id="myChart"
+  width="900"
+  height="900"
+  style="background-color: white"
+></canvas>
+
+<p>
+  ざっくりいうとping値は、全部それなりに安定で低いです。でも、AWSとxserverは残念ながら不安定な場合もそれなりに存在します。
+  ディスクI/OはAWSがぶっちぎりで悪く、xserverがぶっちぎりで良いです。
+</p>
+<p>
+  Geekbenchシングルコアはxserverがすごいです。conohaがかなり低いです。マルチコアに関して、xserverとkagoyaがよさそうですね。linodeが低いです。
+</p>
+
+<p>
+  ダウンロードは少々面白い結果です。conohaとkagoyaは断然遅いです。でも、すごく安定しています。
+  vultrとlinodeはより早いけど、波があります。特にLos
+  Angelesに対する、linodeが信じられないくらい遅くなりました。
+  Shanghaiは、どれも不安定なところがあります。
+  日本国内の速度を確認したら、xserverは最初さくさくだったけど、<a
+    href="assets/xserver-difference-download.png"
+    >ある日速度が著しく下がっちゃいました</a
+  >。あいにく、制限されてしまったのでしょうか。
+</p>
+
+<p>
+  アップロードならvultr以外はほとんど安定してますよね。他の会社は全部少しムラがあるけど、そんなに多くはないですね。
+</p>
+
+<h2 id="concluding">まとめ</h2>
+<p>
+  まずxserverに謝らないといけないです。xserverが怪しいという偏見があったんですけど、結果としてはびっくりほど問題なかったです。
+  特にディスクI/O、両方のGeekbench、ダウンロード（制限されちゃう前）に関してぶっちぎりトップでした！
+  ダウンロードが制限されちゃうのはマイナスで悲しいことだけど、制限されてもconohaとkagoyaより５倍くらい早いです。
+  でも、データに表示されてないことがあります。システムメンテナンスの通知が多かったです。二回もありました。
+  pingの不安定なところも加えたら私の場合は使わないと思います。
+</p>
+
+<p>
+  AWSは意外と<a href="assets/amazon-unstable-median.png">pingが不安定</a
+  >で、各機能が低いため採用する事はないです。vultrは途中で強制再起動されてしまいまして、ログインもできなくて修理することにかなりの労力がかかりました。最悪でした！
+  それにconohaとvultrはpingの最高値には<a
+    href="assets/conoha-vultr-unstable-max.png"
+    >波があります</a
+  >。そのため、除外します。
+</p>
+
+<p>
+  kagoyaとlinodeしか残ってないですね。<a href="assets/kagoya-linode-diskio.png"
+    >ディスクI/O</a
+  >と<a href="assets/kagoya-linode-singlecore.png">Geekbench シングルコア</a
+  >ならほぼ同じですね。Geekbench マルチコアはkagoyaの<a
+    href="assets/kagoya-linode-multicore.png"
+    >圧勝です</a
+  >。そして、ダウンロードはkagoyaが著しく安定してる一方、linodeはとんでもないほど遅い時もあります。
+  Shanghaiと遮断された経験もありました。
+  結論を付けるのが難しいですね。kagoyaのように安定してる事は魅力的な事です。
+  でもkagoyaのdebianがないところが好きではない。
+  安定性から見れば私にはやっぱり<b>kagoya</b>が少し上かな。
+  でも、ベンチマークではなくて実際のプログラムで両方を使ってみる価値があると感じます。
+</p>
+
+<h2 id="references">資料</h2>
+<ul>
+  <li>
+    <a href="https://blog-bootcamp.jp/start/wordpress-server-vps/"
+      >VPSのおすすめ8社を徹底比較 | 2022年最新のランキング</a
+    >
+  </li>
+  <li>
+    <a
+      href="https://www.linuxquestions.org/questions/debian-26/%5Bsolved%5D-how-do-i-use-virtio-drivers-in-debian-in-a-kvm-virtual-machine-4175442186/"
+      >virtio導入(kagoyaには必要）</a
+    >
+  </li>
+</ul>
+
+<style>
+  #toc_container {
+    border: 1px solid #aaa;
+    display: table;
+    font-size: 85%;
+    margin-bottom: 1em;
+    padding: 10px;
+    width: auto;
+  }
+  .toc_title {
+    font-weight: 700;
+    text-align: center;
+  }
+  details {
+    border: 1px solid #aaa;
+    border-radius: 4px;
+    padding: 0.5em 0.5em 0;
+  }
+  summary {
+    font-weight: bold;
+    margin: -0.5em -0.5em 0;
+    padding: 0.5em;
+  }
+  details[open] {
+    padding: 0.5em;
+  }
+  details[open] summary {
+    border-bottom: 1px solid #aaa;
+    margin-bottom: 0.5em;
+  }
+  table {
+    border-top: 1px solid #4a4a4a;
+  }
+</style>
+<script defer src="./assets/japanese-vps-benchmark-data.js"></script>
+<script defer src="./assets/chart.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/luxon@^2"></script>
+<script
+  defer
+  src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@^1"
+></script>
+<script defer src="./assets/japanese-vps-benchmark-charts.js"></script>
