@@ -1,0 +1,261 @@
+<blurb>DNS server priority in Android's Opportunistic Private DNS mode</blurb>
+<tag>android</tag>
+<tag>networking</tag>
+<tag>dns</tag>
+
+<div id="toc_container">
+  <p class="toc_title">Contents</p>
+  <ul>
+    <li>
+      <a href="#intro">Intro</a>
+    </li>
+    <li>
+      <a href="#setup">Setting up DNS-over-TLS (DoT)</a>
+    </li>
+    <li>
+      <a href="#debugging">Debugging Private DNS Priority</a>
+    </li>
+  </ul>
+</div>
+
+I investigate into why a local DNS server was being deprioritized compare to
+public DNS servers on Android in Private DNS's Opportunistic mode.
+
+<h2 id="intro">Intro</h2>
+<p>
+  In 2022, I set up a local DNS server so I could try out blocking ads on the
+  DNS level with something like pihole. I changed my DHCP server to point to
+  this server (using an IP address like 192.168.1.225) as the primary DNS server
+  and for redundancy I kept Google's Public DNS server 8.8.8.8. as the secondary
+  DNS. That way I could restart my machine without any issues. Things were
+  great. I was able to see devices connect to my new local DNS server and see
+  ads blocked on the DNS level.
+</p>
+
+<p>
+  However, I eventually noticed my Android devices would curiously ignore my DNS
+  server. After a little investigation, I realized that Android has something
+  called "Private DNS".
+</p>
+
+<img
+  src="assets/private-dns-menu.png"
+  loading="lazy"
+  height="400"
+  style="height: 400px"
+/>
+
+<p>
+  By default, Android has Private DNS in the "automatic" aka
+  <b><i>Opportunistic</i></b> mode.
+</p>
+
+<blockquote>
+  With the opportunistic privacy profile, the DNS server IP address may be
+  configured directly by the user or obtained from the local network (using DHCP
+  or some other means). The client resolver attempts to establish a secure
+  connection on port 853 to the specified DNS server. If a secure connection is
+  established, this provides privacy for the user's queries from passive
+  observers on the path. Since the client does not verify the authenticity of
+  the server it is not protected from an active attacker. If the client cannot
+  establish a secure connection on port 853, it falls back to communicating with
+  the DNS server on the standard DNS port 53 over UDP or TCP without any
+  security or privacy. The use of Opportunistic Privacy is intended to support
+  incremental deployment of increased privacy with a view to widespread adoption
+  of the strict privacy profile.
+  <figcaption>
+    —
+    <cite
+      ><a
+        href="https://web.archive.org/web/20230123190135/https://developers.google.com/speed/public-dns/docs/dns-over-tls?hl=en#how_it_works"
+      >
+        DNS-over-TLS - How it Works</a
+      ></cite
+    >
+  </figcaption>
+</blockquote>
+
+<h2 id="setup">Setting up DNS-over-TLS (DoT)</h2>
+<p>
+  Since I didn't have DNS-over-TLS (DoT) set up, it would go to the secondary
+  DNS server of 8.8.8.8, which does have DoT set up. I configured my DNS server
+  to accept DoT connections and got a certificate. Since the authenticity of the
+  server is not supposed to be validated, I assumed a generic cert from Let's
+  Encrypt would get the job done. Unfortunately, by default, Let's Encrypt uses
+  a certificate chain cross signed with an expired root certificate (for more
+  background see
+  <a href="https://karlquinsland.com/skyhole-expired-lets-encrypt-ca/">these</a>
+  <a href="https://ikarus.sg/lets-encrypt-dot-android/">blog</a>
+  <a
+    href="https://blog.jeroenhd.nl/article/let-s-encrypt-dns-over-tls-and-android"
+    >posts</a
+  >). Android rejects this immediately upon seeing it. The solution is to
+  regenerate the cert using "ISRG Root X1" as the preferred issuer.
+</p>
+
+<p>
+  After confirming my DoT server was set up with the right certs and could
+  respond correctly to the 853 port via
+  <a href="https://www.knot-dns.cz/docs/2.6/html/man_kdig.html"><i>kdig</i></a
+  >, I tried again with my Android devices. Still no good. Only a very small
+  number of regular DNS requests were made to my local DNS server, likely for
+  bootstrapping. The majority of requests when browsing were going to Google's
+  Public DNS (8.8.8.8). I assumed I had another configuration issue of some
+  sort. To confirm, I temporarily changed my DHCP server to only have my local
+  DNS server. Surprisingly, this worked and all the requests were indeed being
+  sent via DoT to my local DNS server.
+  <b
+    ><i
+      >But, when there were 2 servers in my DHCP, why did my local server get
+      deprioritized compared to 8.8.8.8?</i
+    ></b
+  >
+</p>
+
+<h2 id="debugging">Debugging Private DNS Priority</h2>
+<p>
+  My first guess was there was some special casing for Google's Public DNS by
+  Android since they are both Google products. I then tried using some other
+  Public DNS servers like Cloudflare's 1.1.1.1 and OpenDNS's 208.67.222.222. I
+  saw the same behavior where my server was always being deprioritized compared
+  to these public DNS servers. Given the wide variety of servers I tried, I felt
+  like it was unlikely to be special casing by Android. I scoured the web for if
+  someone had dug into this and written up an explanation, but I didn't find
+  anything.
+</p>
+
+<p>
+  At this point, I had no other leads so I started looking at the Android source
+  code to try to figure out the mystery. I found
+  <a
+    href="https://cs.android.com/android/platform/superproject/+/master:packages/modules/DnsResolver/"
+    >the main folder</a
+  >
+  for DNS resolution related code and started digging. I found a function called
+  <a
+    href="https://cs.android.com/android/platform/superproject/+/master:packages/modules/DnsResolver/res_send.cpp;drc=c84b0fbdfc0d221806c14170fb4197cfc2b9b035;l=1421"
+    ><i>res_tls_send</i></a
+  >, which does the DNS query over TLS. I then found
+  <a
+    href="https://cs.android.com/android/platform/superproject/+/master:packages/modules/DnsResolver/DnsTlsDispatcher.cpp;drc=2bee933745b9e13d7bae6ba429ae16cf33a6373b;l=51"
+    ><i>DnsTlsDispatcher::getOrderedAndUsableServerList</i></a
+  >, which stated a sorted ordering.
+</p>
+<pre>
+<code>    // Our preferred DnsTlsServer order is:
+    //     1) reuse existing IPv6 connections
+    //     2) reuse existing IPv4 connections
+    //     3) establish new IPv6 connections
+    //     4) establish new IPv4 connections
+</code></pre>
+
+<p>
+  However, I didn't think any of the sorted differences applied since all the
+  addresses were IPv4 and the existence of the connection wouldn't differ
+  between a well known public DNS and my own local DNS server after rebooting my
+  Android device. In that case, the ordering would just be the order of the list
+  of tlsServers that was passed in. That ordering comes from a function called
+  <a
+    href="https://cs.android.com/android/platform/superproject/+/master:packages/modules/DnsResolver/PrivateDnsConfiguration.h;drc=04a8b1a8f8864b00c319d00adbe719db9b8418fb;l=53"
+    ><i>validatedServers</i></a
+  >. The ordering thus comes a <i>std::map</i> called
+  <a
+    href="https://cs.android.com/android/platform/superproject/+/master:packages/modules/DnsResolver/PrivateDnsConfiguration.h;drc=04a8b1a8f8864b00c319d00adbe719db9b8418fb;l=49"
+    >dotServersMap</a
+  >
+  sorting based on the
+  <a
+    href="https://cs.android.com/android/platform/superproject/+/master:bionic/libc/include/bits/in_addr.h;drc=04a8b1a8f8864b00c319d00adbe719db9b8418fb;l=40"
+    >32-bit integer</a
+  >
+  representing an
+  <a
+    href="https://cs.android.com/android/platform/superproject/+/master:packages/modules/DnsResolver/DnsTlsServer.cpp;l=102;drc=4499ee36eea0bdc498ff669ae2ecd706d5702ce2"
+    >IP Address</a
+  >.
+</p>
+
+<p>
+  In that case, my local DNS server's IP of 192.168.1.225 would correspond to
+  3232261089. And 8.8.8.8 would correspond to 134744072, which is smaller. That
+  would explain the reason why 8.8.8.8 is prioritized. OpenDNS's 208.67.222.222
+  would correspond to 3494108894, which is larger than my local server's IP.
+  Despite that, OpenDNS was being prioritized compared to my local DNS.
+</p>
+
+<p>
+  After staring at the code a ton, I realized with my limited C++ and Android
+  internals knowledge, I probably wasn't going to get too much further without
+  running some code. I compiled Android's DnsResolver code, added some logging,
+  and ran some unit tests. With that I was able to find out that the actual
+  integer values used in the <i>std::map</i> corresponding to 192.168.1.225,
+  8.8.8.8, and 208.67.222.222 were 3774982336, 134744072, and 3739108304
+  respectively. So my local IP address in practice was indeed larger than the
+  public DNSes. Google's public DNS matched my calculated values, but the other
+  IP addreses didn't. I wasn't able to figure out why the numbers differed from
+  what I expected, but my brother who is more proficient in C++ was able to
+  deduce that the reason for this. IP Addresses are represented in
+  <a href="https://en.wikipedia.org/wiki/Endianness#Networking"
+    >big endian order</a
+  >
+  aka <b><i>network byte order</i></b
+  >. But, my ARM processor had the value stored in little endian order. Thus,
+  the values were reversed, which explains the difference in the integer values.
+</p>
+
+<p>
+  Since the value of the bytes were being reversed, I just needed to make sure
+  that the lowest byte for my local DNS server was lower than the lowest byte of
+  the public DNS server I used. Thus, I switched the IP of my local DNS server
+  to 192.168.1.4 which would have an integer representation as 67217600, less
+  than Google's Public DNS. Using 192.168.1.4 and OpenDNS's 208.67.222.222, I
+  was finally able to get the expected behavior where my local DNS server was
+  prioritized. Yet, using Google's 8.8.8.8 would still prioritize Google's
+  server over my own.
+</p>
+
+<p>
+  At this point, I was truly stumped. Luckily, looking at the history of the Git
+  commits to Android, I was able to find the contact for one of the people who
+  wrote this networking code. I asked this person and they explained the
+  situation in about 5 minutes. It turns out there is
+  <a
+    href="https://cs.android.com/android/platform/superproject/+/master:packages/modules/DnsResolver/PrivateDnsConfiguration.h;l=250-252;drc=4c80818efc71774b662aa3167d03cf49b1266909"
+    >special casing</a
+  >
+  for Google's 8.8.8.8 after all! This special casing would make 8.8.8.8
+  automatically be categorized as a DoH (DNS-over-HTTPS) server. Then, in the
+  code right before
+  <i>res_tls_send</i> was called, there is a
+  <a
+    href="https://cs.android.com/android/platform/superproject/+/master:packages/modules/DnsResolver/res_send.cpp;drc=c84b0fbdfc0d221806c14170fb4197cfc2b9b035;l=1330-1333"
+    >conditional
+  </a>
+  that checks if there are DoH servers available. If DoH servers are available,
+  it queries using the DoH servers instead of using DoT!
+</p>
+
+<p>
+  This investigation took months and I was frequently out of my depth, but I'm
+  glad to have finally figured out most of the points of confusion. Because I
+  only want to use a public DNS as a backup in case my local DNS fails, I
+  unfortunately can't use 8.8.8.8 due to the prioritization. I also can't use
+  Cloudflare's 1.1.1.1 because it's really hard to get a lower integer
+  representation as that without changing my subnet. I just picked another
+  public DNS and I now finally have the setup I want. It was a long journey.
+</p>
+
+<style>
+  #toc_container {
+    border: 1px solid #aaa;
+    display: table;
+    font-size: 85%;
+    margin-bottom: 1em;
+    padding: 10px;
+    width: auto;
+  }
+  .toc_title {
+    font-weight: 700;
+    text-align: center;
+  }
+</style>
