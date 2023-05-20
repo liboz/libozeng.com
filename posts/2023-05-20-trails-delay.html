@@ -1,0 +1,452 @@
+<blurb>Cast Delay in Ao no Kiseki (Trails to Azure)</blurb>
+<tag>kiseki</tag>
+
+<p>
+  The math is relatively simple. Each spell has a base cast time. That base time
+  is divided by the user's speed. The number is then rounded down to get the
+  actual cast time. If the user has a Cast quartz, it is then multipled by the
+  Cast quartz value and rounded up this time.
+</p>
+
+Formula:
+<code>CEIL(FLOOR(BASE_CAST_TIME/SPD)*(Cast Quartz Effect))</code>
+
+<div style="display: flex">
+  <table id="spell_table"></table>
+
+  <div>
+    <label for="delay">Base Delay:</label>
+    <input
+      id="delay"
+      name="delay"
+      value="2000"
+      onchange="recalculate()"
+      autocomplete="off"
+    />
+    <label for="spd">SPD stat:</label>
+    <input
+      id="spd"
+      name="spd"
+      value="70"
+      onchange="recalculate()"
+      autocomplete="off"
+    />
+    <label for="cast">Cast Quartz:</label>
+    <select id="cast" onchange="recalculate()" autocomplete="off">
+      <option value="3/4">Cast 1</option>
+      <option value="2/3" selected>Cast 2</option>
+      <option value="1/2">Time Gem aka Cast 3</option>
+    </select>
+
+    <label for="actual_delay">Actual Delay:</label>
+    <input
+      type="text"
+      id="actual_delay"
+      name="actual_delay"
+      disabled
+    /><br /><br />
+  </div>
+</div>
+
+<p>
+  Note that
+  <a
+    href="https://gamefaqs.gamespot.com/vita/694912-the-legend-of-heroes-trails-of-cold-steel/faqs/72988"
+    >Cold Steel</a
+  >
+  may round down from cast quartz, but in Azure it appears to be rounded up.
+</p>
+
+<p>
+  Raw data gathered from various guides in Japanese and English. Did some manual
+  testing as well to confirm the cast quartz interaction with delay.
+</p>
+
+<script>
+  function recalculate() {
+    var baseDelay = Number(document.getElementById("delay").value);
+    var spd = Number(document.getElementById("spd").value);
+    var castParts = document.getElementById("cast").value.split("/");
+    var cast = Number(castParts[0]) / Number(castParts[1]);
+
+    var actualDelay = Math.ceil(Math.floor(baseDelay / spd) * cast);
+    var actualDelayElement = document.getElementById("actual_delay");
+    actualDelayElement.value = actualDelay;
+    flashElement(actualDelayElement);
+  }
+
+  var elementData = {
+    Earth: "#CD853F",
+    Water: "#B0C4DE",
+    Fire: "#FF7F50",
+    Wind: "#9ACD32",
+    Time: "#808080",
+    Space: "#FFD700",
+    Mirage: "#F5F5F5",
+  };
+
+  var spellData = [
+    [
+      {
+        name: "ストーンスパイク",
+        ep: 20,
+        channel: 2000,
+        power: 100,
+        en_name: "Stone Spike",
+      },
+      { name: "クエイク", ep: 60, channel: 2000, power: 120, en_name: "Quake" },
+      {
+        name: "ゴルゴンブレス",
+        ep: 80,
+        channel: 2500,
+        power: 220,
+        en_name: "Gorgon Breath",
+      },
+      {
+        name: "ジアータイタニス",
+        ep: 120,
+        channel: 2500,
+        power: 250,
+        en_name: "Gaea Titanis",
+      },
+      {
+        name: "ユグドラシエル",
+        ep: 200,
+        channel: 3000,
+        power: 300,
+        en_name: "Yggdrasil",
+      },
+      {
+        name: "ギガントレイジ",
+        ep: 440,
+        channel: 3500,
+        power: 400,
+        en_name: "Gigant Rage",
+      },
+    ],
+    [
+      {
+        name: "アイシクルエッジ",
+        ep: 20,
+        channel: 2000,
+        power: 100,
+        en_name: "Icicle Edge",
+      },
+      {
+        name: "ブルードロップ",
+        ep: 60,
+        channel: 2000,
+        power: 160,
+        en_name: "Blue Drop",
+      },
+      {
+        name: "アイスハンマー",
+        ep: 90,
+        channel: 2000,
+        power: 190,
+        en_name: "Ice Hammer",
+      },
+      {
+        name: "ハイドロカノン",
+        ep: 130,
+        channel: 2000,
+        power: 260,
+        en_name: "Hydro Cannon",
+      },
+      {
+        name: "ダイアモンドダスト",
+        ep: 160,
+        channel: 3000,
+        power: 260,
+        en_name: "Diamond Dust",
+      },
+      {
+        name: "アラウンドノア",
+        ep: 220,
+        channel: 3000,
+        power: 300,
+        en_name: "Around Noah",
+      },
+      {
+        name: "エンドオブワールド",
+        ep: 460,
+        channel: 3500,
+        power: 370,
+        en_name: "End of World",
+      },
+    ],
+    [
+      {
+        name: "ファイアボルト",
+        ep: 20,
+        channel: 2000,
+        power: 105,
+        en_name: "Fire Bolt",
+      },
+      {
+        name: "ヒートウェイブ",
+        ep: 60,
+        channel: 2500,
+        power: 140,
+        en_name: "Heatwave",
+      },
+      {
+        name: "マグナブレイズ",
+        ep: 80,
+        channel: 2500,
+        power: 250,
+        en_name: "Magna Blaze",
+      },
+      {
+        name: "フレアバタフライ",
+        ep: 180,
+        channel: 3000,
+        power: 260,
+        en_name: "Flare Butterfly",
+      },
+      {
+        name: "クリムゾンレイ",
+        ep: 140,
+        channel: 3500,
+        power: 400,
+        en_name: "Crimson Ray",
+      },
+      {
+        name: "ロードインフェルノ",
+        ep: 460,
+        channel: 3500,
+        power: 410,
+        en_name: "Lord Inferno",
+      },
+    ],
+    [
+      {
+        name: "スパークル",
+        ep: 20,
+        channel: 1500,
+        power: 95,
+        en_name: "Sparkle",
+      },
+      {
+        name: "エアロシックル",
+        ep: 50,
+        channel: 1500,
+        power: 140,
+        en_name: "Aero Sickle",
+      },
+      {
+        name: "エアリアル",
+        ep: 90,
+        channel: 2000,
+        power: 175,
+        en_name: "Aerial",
+      },
+      {
+        name: "スパークダイン",
+        ep: 100,
+        channel: 2000,
+        power: 270,
+        en_name: "Spark Dyne",
+      },
+      {
+        name: "サンダーシクリオン",
+        ep: 260,
+        channel: 2500,
+        power: 280,
+        en_name: "Thunder Cyclone",
+      },
+      {
+        name: "ラグナドリオン",
+        ep: 400,
+        channel: 3000,
+        power: 380,
+        en_name: "Ragna Dolían",
+      },
+    ],
+    [
+      {
+        name: "ソウルブラー",
+        ep: 30,
+        channel: 1500,
+        power: 110,
+        en_name: "Soul Blur",
+      },
+      {
+        name: "カラミティエッジ",
+        ep: 70,
+        channel: 2000,
+        power: 150,
+        en_name: "Calamity Edge",
+      },
+      {
+        name: "デス・スパイラル",
+        ep: 120,
+        channel: 2000,
+        power: 200,
+        en_name: "Death Spiral",
+      },
+      {
+        name: "シャドーアポクリフ",
+        ep: 260,
+        channel: 2500,
+        power: 280,
+        en_name: "Shadow Blade",
+      },
+      {
+        name: "ルシフェンウィング",
+        ep: 400,
+        channel: 3000,
+        power: 350,
+        en_name: "Lucifen Wing",
+      },
+    ],
+    [
+      {
+        name: "フォトンシュート",
+        ep: 40,
+        channel: 2500,
+        power: 160,
+        en_name: "Photon Shot",
+      },
+      {
+        name: "ダークマター",
+        ep: 90,
+        channel: 2500,
+        power: 120,
+        en_name: "Dark Matter",
+      },
+      {
+        name: "ゴールドハイロゥ",
+        ep: 170,
+        channel: 2500,
+        power: 210,
+        en_name: "Gold Halo",
+      },
+      {
+        name: "ラストディザスター",
+        ep: 220,
+        channel: 3500,
+        power: 300,
+        en_name: "Last Disaster",
+      },
+      {
+        name: "リーンカルナシオン",
+        ep: 440,
+        channel: 3500,
+        power: 400,
+        en_name: "Reincarnation",
+      },
+    ],
+    [
+      {
+        name: "カオスブランド",
+        ep: 35,
+        channel: 2500,
+        power: 140,
+        en_name: "Chaos Brand",
+      },
+      {
+        name: "シルバーソーン",
+        ep: 120,
+        channel: 2500,
+        power: 160,
+        en_name: "Silver Thorn",
+      },
+      {
+        name: "ガリオンタワー",
+        ep: 200,
+        channel: 3000,
+        power: 200,
+        en_name: "Galion Tower",
+      },
+      {
+        name: "アヴァロンゲート",
+        ep: 300,
+        channel: 3000,
+        power: 280,
+        en_name: "Avalon Gate",
+      },
+      {
+        name: "アルジェントアーク",
+        ep: 450,
+        channel: 3500,
+        power: 380,
+        en_name: "Argento Arc",
+      },
+    ],
+  ];
+
+  function createTable() {
+    var spellTable = document.getElementById("spell_table");
+    var rows = [];
+    for (var i = 0; i < 8; i++) {
+      var row = document.createElement("tr");
+      rows.push(row);
+      spellTable.appendChild(row);
+    }
+
+    // set up first row
+    for (var i = 0; i < 7; i++) {
+      var header = document.createElement("td");
+      var elementName = Object.keys(elementData)[i];
+      header.style = `background-color: ${elementData[elementName]}; color: black;`;
+      var text = document.createTextNode(elementName);
+      header.appendChild(text);
+      rows[0].appendChild(header);
+    }
+
+    for (var rowNumber = 0; rowNumber < 7; rowNumber++) {
+      var row = rows[rowNumber + 1]; // first row is header
+      for (var elementNumber = 0; elementNumber < 7; elementNumber++) {
+        var maybeSpell = spellData[elementNumber][rowNumber];
+        var spell = document.createElement("td");
+        if (maybeSpell) {
+          var text = document.createTextNode(maybeSpell.en_name);
+          spell.channel = maybeSpell.channel;
+          spell.className = "spell";
+          spell.appendChild(text);
+          spell.onclick = (ev) => {
+            var delayElement = document.getElementById("delay");
+            delayElement.value = ev.target.channel;
+            flashElement(delayElement);
+            recalculate();
+          };
+        }
+        row.appendChild(spell);
+      }
+    }
+  }
+
+  function flashElement(e) {
+    e.classList.add("flash");
+    e.addEventListener("animationend", () => e.classList.remove("flash"));
+  }
+
+  createTable();
+</script>
+
+<style>
+  table tr td {
+    border-left: 1px solid #4a4a4a;
+    border-right: 1px solid #4a4a4a;
+  }
+
+  td.spell:hover {
+    cursor: grab;
+    background-color: #c9c9c9;
+    color: black;
+  }
+
+  .flash {
+    animation: flash 0.5s;
+  }
+
+  @keyframes flash {
+    50% {
+      opacity: 25%;
+    }
+    100% {
+      opacity: 100%;
+    }
+  }
+</style>
