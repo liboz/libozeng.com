@@ -279,10 +279,20 @@ func addMiscFiles() {
 }
 
 func addAssets() {
-	assets := getDir("assets")
+	copyDir("assets/", "public/assets/")
+}
 
-	for i := 0; i < len(assets); i++ {
-		Copy("assets/"+assets[i].Name(), "public/assets/"+assets[i].Name())
+func copyDir(originalPath string, newPath string) {
+	originalFolder := getDir(originalPath)
+	for _, item := range originalFolder {
+		originalItemPath := originalPath + item.Name()
+		newItemPath := newPath + item.Name()
+		if item.IsDir() {
+			os.MkdirAll(newItemPath, 0755)
+			copyDir(originalItemPath+"/", newItemPath+"/")
+		} else {
+			Copy(originalItemPath, newItemPath)
+		}
 	}
 }
 
