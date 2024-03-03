@@ -12,6 +12,8 @@ jobs:
     steps:
       - uses: actions/checkout@master
       - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
       - run: go run main.go
       - uses: w9jds/firebase-action@master
         with:
