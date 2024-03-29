@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
@@ -33,7 +34,8 @@ func findEndOfDate(fileName string) string {
 		}
 		accumulatingStr += strChar
 	}
-	panic("didn't find date like thing")
+	errorString := fmt.Sprintf("didn't find date like thing in %s", fileName)
+	panic(errorString)
 }
 
 func indexLayoutStart(title string) string {
