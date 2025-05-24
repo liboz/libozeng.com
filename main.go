@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"os"
 	"regexp"
@@ -91,8 +90,8 @@ func postLayoutStart(title string) string {
 			`
 }
 
-func getDir(dir string) []os.FileInfo {
-	p, err := ioutil.ReadDir(dir)
+func getDir(dir string) []os.DirEntry {
+	p, err := os.ReadDir(dir)
 
 	if err != nil {
 		panic(err)
@@ -102,7 +101,7 @@ func getDir(dir string) []os.FileInfo {
 }
 
 func writeFile(fileName string, b bytes.Buffer) {
-	err := ioutil.WriteFile("public/"+fileName, b.Bytes(), 0644)
+	err := os.WriteFile("public/"+fileName, b.Bytes(), 0644)
 
 	if err != nil {
 		panic(err)
@@ -166,7 +165,7 @@ type postMeta struct {
 	blurb string
 }
 
-func getPostMeta(fi os.FileInfo) (string, postMeta, *os.File, *bufio.Scanner) {
+func getPostMeta(fi os.DirEntry) (string, postMeta, *os.File, *bufio.Scanner) {
 	id := fi.Name()
 	re := regexp.MustCompile(`(\d+-)+`)
 	match := re.FindStringSubmatch(fi.Name())
@@ -207,7 +206,7 @@ func getPostMeta(fi os.FileInfo) (string, postMeta, *os.File, *bufio.Scanner) {
 func generatePosts(postNameMap map[string]postMeta) {
 	posts := getDir("posts")
 
-	for i := 0; i < len(posts); i++ {
+	for i := range posts {
 		id, metaInfo, file, scanner := getPostMeta(posts[i])
 		postNameMap[id] = metaInfo
 
@@ -269,13 +268,14 @@ func Copy(src, dst string) error {
 }
 
 func createFilesAndDirs() {
+	os.RemoveAll("public")
 	os.MkdirAll("public/assets", 0755)
 }
 
 func addMiscFiles() {
 	misc := getDir("misc")
 
-	for i := 0; i < len(misc); i++ {
+	for i := range misc {
 		Copy("misc/"+misc[i].Name(), "public/"+misc[i].Name())
 	}
 }
