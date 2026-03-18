@@ -1,3 +1,3 @@
 module libozeng.com/blog
 
-go 1.24
+go 1.26
