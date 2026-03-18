@@ -15,7 +15,7 @@ jobs:
         with:
           go-version: "1.26"
       - run: go run main.go
-      - uses: w9jds/firebase-action@master
+      - uses: w9jds/firebase-action@v14.20.0
         with:
           args: deploy --only hosting
         env:
